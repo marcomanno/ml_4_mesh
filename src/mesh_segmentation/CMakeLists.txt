@@ -20,6 +20,6 @@ add_custom_command(
         TARGET mesh_segmentation POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy
                 ${CMAKE_SOURCE_DIR}/tensorflow/lib/tensorflow.dll
-                ${CMAKE_CURRENT_BINARY_DIR}/tensorflow.dll)
+                $<TARGET_FILE_DIR:mesh_segmentation>/tensorflow.dll)
 
 # TODO: Add tests and install targets if needed.

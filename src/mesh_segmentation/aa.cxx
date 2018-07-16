@@ -1,5 +1,6 @@
 ﻿// CMakeProject1.cpp : Defines the entry point for the application.
 //
+#pragma optimize ("", off)
 
 #include "aa.hxx"
 
@@ -17,6 +18,7 @@
 #include "tensorflow/cc/framework/gradients.h"
 #include "tensorflow/cc/ops/training_ops.h"
 #include "tensorflow/cc/client/client_session.h"
+#include "tensorflow/cc/ops/standard_ops.h"
 
 #include <iostream>
 #include <fstream>
@@ -65,12 +67,13 @@ int main()
   Weight00 ff(scope, 3, 3);
   //tensorflow::ops::RandomNormal val(scope, { 3., 3. }, tensorflow::DT_FLOAT);
 
-  tensorflow::Tensor vv(tensorflow::DataTypeToEnum<float>::v(), tensorflow::TensorShape{ 3, 3 });
+  tensorflow::Tensor vv(tensorflow::DT_FLOAT, tensorflow::TensorShape{ 3, 3 });
   for(int i = 0; i < 9; ++i)
     vv.flat<float>().data()[i] = 0;
+  auto c = tensorflow::ops::Const(scope, vv);
 
   tensorflow::ops::Assign assign_ff(
-    scope, ff.w_, vv);
+    scope, ff.w_, c);
 
 
 
@@ -136,12 +139,14 @@ int main()
       file >> data;
       _vv.push_back(data);
     };
-    while(!file.eof())
+    char newline;
+    while(!file.eof() && file.good())
     {
       add_element(xx);
       add_element(xx);
       add_element(xx);
       add_element(yy);
+      file >> newline;
     }
   };
   load_data();
