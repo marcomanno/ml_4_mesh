@@ -131,22 +131,17 @@ int main()
   std::vector<float> xx, yy;
   auto load_data = [&xx, &yy]()
   {
-    const char* flnm = R"(C:\Users\marco\Project\mesh_and_machine_learning\src\mesh_segmentation\data.txt)";
-    std::ifstream file(flnm);
-    auto add_element = [&file](std::vector<float>& _vv)
+    const char* flnm = "C:/Users/marco/Project/ml_4_mesh/src/mesh_segmentation/data.txt";
+    std::ifstream in_data(flnm);
+    while (in_data.good() && !in_data.eof())
     {
-      float data;
-      file >> data;
-      _vv.push_back(data);
-    };
-    char newline;
-    while(!file.eof() && file.good())
-    {
-      add_element(xx);
-      add_element(xx);
-      add_element(xx);
-      add_element(yy);
-      file >> newline;
+      int fuel = 0;
+      float val[3];
+      in_data >> val[0] >> fuel >> val[1] >> val[2];
+      xx.emplace_back(val[0]);
+      xx.emplace_back(fuel);
+      xx.emplace_back(val[1]);
+      yy.emplace_back(val[2]);
     }
   };
   load_data();
@@ -182,11 +177,11 @@ int main()
 
   // prediction using the trained neural net
   tensorflow::Tensor x_0(tensorflow::DataTypeToEnum<float>::v(), tensorflow::TensorShape{ 1, 3 });
-  x_0.vec<float>()(0) = 110000.f;
-  x_0.vec<float>()(1) = -1;
-  x_0.vec<float>()(2) = 7.f;
+  x_0.flat<float>().data()[0] = 1.1f;
+  x_0.flat<float>().data()[1] = -1;
+  x_0.flat<float>().data()[2] = 7.f;
 
-  TF_CHECK_OK(session.Run({ { x, { x_0 } } }, { layer_3 }, &outputs));
+  TF_CHECK_OK(session.Run({ { x, x_0} }, { layer_3 }, &outputs));
   std::cout << "DNN output: " << *outputs[0].scalar<float>().data() << std::endl;
   std::cout << "Price predicted " << *outputs[0].scalar<float>().data() << " euros" << std::endl;
   return 0;
