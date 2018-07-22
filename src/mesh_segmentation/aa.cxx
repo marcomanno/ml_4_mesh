@@ -23,21 +23,15 @@
 #include <iostream>
 #include <fstream>
 
-struct Weight00
+struct Weight
 {
-  Weight00(tensorflow::Scope& scope, int M, int N) :
-    w_(scope, { M, N }, tensorflow::DT_FLOAT)
-  {}
-  tensorflow::ops::Variable w_;
-};
-
-struct Weight : public Weight00
-{
-  Weight(tensorflow::Scope& scope, int M, int N) : Weight00(scope, M, N),
+  Weight(tensorflow::Scope& scope, int M, int N) : 
+    w_(scope, { M, N }, tensorflow::DT_FLOAT),
     assign_w_(
       scope, w_,
       tensorflow::ops::RandomNormal(scope, { M, N }, tensorflow::DT_FLOAT))
   {}
+  tensorflow::ops::Variable w_;
   tensorflow::ops::Assign assign_w_;
 };
 
@@ -52,6 +46,16 @@ auto make_layer(tensorflow::Scope& _scope,
     tensorflow::ops::Add(_scope, tensorflow::ops::MatMul(_scope, _X, _A), _B));
 }
 
+static void load_data(std::vector<float> & _xx, std::vector<float>& _yy)
+{
+  std::ifstream in_data("C:/Users/marco/Project/ml_4_mesh/src/mesh_segmentation/data.txt");
+  while (in_data.good() && !in_data.eof())
+  {
+    for (int i = 3; --i >= 0; in_data >> _xx.emplace_back());
+    in_data >> _yy.emplace_back();
+  }
+};
+
 
 // https://matrices.io/training-a-deep-neural-network-using-only-tensorflow-c/
 // https://www.tensorflow.org/api_guides/cc/guide
@@ -63,20 +67,6 @@ int main()
 
   auto x = tensorflow::ops::Placeholder(scope, tensorflow::DT_FLOAT);
   auto y = tensorflow::ops::Placeholder(scope, tensorflow::DT_FLOAT);
-
-  Weight00 ff(scope, 3, 3);
-  //tensorflow::ops::RandomNormal val(scope, { 3., 3. }, tensorflow::DT_FLOAT);
-
-  tensorflow::Tensor vv(tensorflow::DT_FLOAT, tensorflow::TensorShape{ 3, 3 });
-  for(int i = 0; i < 9; ++i)
-    vv.flat<float>().data()[i] = 0;
-  auto c = tensorflow::ops::Const(scope, vv);
-
-  tensorflow::ops::Assign assign_ff(
-    scope, ff.w_, c);
-
-
-
 
   // weights init
   Weight w1(scope, 3, 3);
@@ -113,38 +103,27 @@ int main()
       tensorflow::ops::Square(scope, tensorflow::ops::Sub(scope, layer_3, y)), { 0, 1 }),
     tensorflow::ops::Mul(scope, val_0_01, regularization));
 
-  // add the gradients operations to the graph
-  std::vector<tensorflow::Output> grad_outputs;
-  tensorflow::AddSymbolicGradients(scope, { loss }, all_weights, &grad_outputs);
-
   // update the weights and bias using gradient descent
   std::vector<tensorflow::ops::ApplyGradientDescent> apply_grad;
-  for (int i = 0; i < std::size(all_weights); ++i)
+  auto compute_apply_grad = [&apply_grad, &all_weights, &scope, &loss]()
   {
-    apply_grad.push_back(tensorflow::ops::ApplyGradientDescent(
-      scope, all_weights[i], val_0_01, { grad_outputs[i] }));
-  }
+    auto val_0_01 = tensorflow::ops::Cast(scope, 0.01, tensorflow::DT_FLOAT);
+    // add the gradients operations to the graph
+    std::vector<tensorflow::Output> grad_outputs;
+    tensorflow::AddSymbolicGradients(scope, { loss }, all_weights, &grad_outputs);
+    for (int i = 0; i < std::size(all_weights); ++i)
+    {
+      apply_grad.push_back(tensorflow::ops::ApplyGradientDescent(
+        scope, all_weights[i], val_0_01, { grad_outputs[i] }));
+    }
+  };
+  compute_apply_grad();
 
   tensorflow::ClientSession session(scope);
   std::vector<tensorflow::Tensor> outputs;
 
   std::vector<float> xx, yy;
-  auto load_data = [&xx, &yy]()
-  {
-    const char* flnm = "C:/Users/marco/Project/ml_4_mesh/src/mesh_segmentation/data.txt";
-    std::ifstream in_data(flnm);
-    while (in_data.good() && !in_data.eof())
-    {
-      int fuel = 0;
-      float val[3];
-      in_data >> val[0] >> fuel >> val[1] >> val[2];
-      xx.emplace_back(val[0]);
-      xx.emplace_back(fuel);
-      xx.emplace_back(val[1]);
-      yy.emplace_back(val[2]);
-    }
-  };
-  load_data();
+  load_data(xx, yy);
 
   tensorflow::Tensor x_data(
     tensorflow::DataTypeToEnum<float>::v(),
@@ -155,7 +134,6 @@ int main()
     tensorflow::DataTypeToEnum<float>::v(),
     tensorflow::TensorShape{ static_cast<int>(yy.size()), 1 });
   std::copy(yy.begin(), yy.end(), y_data.flat<float>().data());
-
 
   // init the weights and biases by running the assigns nodes once
   TF_CHECK_OK(session.Run(
