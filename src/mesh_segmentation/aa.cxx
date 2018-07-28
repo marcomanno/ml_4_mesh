@@ -23,6 +23,9 @@
 #include <iostream>
 #include <fstream>
 
+// https://matrices.io/training-a-deep-neural-network-using-only-tensorflow-c/
+// https://www.tensorflow.org/api_guides/cc/guide
+
 struct Weight
 {
   Weight(tensorflow::Scope& scope, int M, int N) : 
@@ -38,6 +41,17 @@ struct Weight
 template <class InputT>
 auto make_layer(tensorflow::Scope& _scope,
                 InputT& _X,
+                tensorflow::Input& _A,
+                tensorflow::Input& _B)
+{
+  return tensorflow::ops::Tanh(
+    _scope,
+    tensorflow::ops::Add(_scope, tensorflow::ops::MatMul(_scope, _X, _A), _B));
+}
+
+template <class InputT>
+auto make_layer(tensorflow::Scope& _scope,
+                InputT& _X,
                 tensorflow::ops::Variable& _A,
                 tensorflow::ops::Variable& _B)
 {
@@ -46,7 +60,8 @@ auto make_layer(tensorflow::Scope& _scope,
     tensorflow::ops::Add(_scope, tensorflow::ops::MatMul(_scope, _X, _A), _B));
 }
 
-static void load_data(std::vector<float> & _xx, std::vector<float>& _yy)
+template <typename typeT>
+void load_data(std::vector<typeT> & _xx, std::vector<typeT>& _yy)
 {
   std::ifstream in_data("C:/Users/marco/Project/ml_4_mesh/src/mesh_segmentation/data.txt");
   while (in_data.good() && !in_data.eof())
@@ -56,16 +71,42 @@ static void load_data(std::vector<float> & _xx, std::vector<float>& _yy)
   }
 };
 
+#include "machine.hxx"
 
-// https://matrices.io/training-a-deep-neural-network-using-only-tensorflow-c/
-// https://www.tensorflow.org/api_guides/cc/guide
+void compute()
+{
+  auto machine = ML::IMachine::make();
+  auto x = machine->make_input(3);
+  auto y = machine->make_output(1);
+  auto w0 = machine->add_weight(3, 3);
+  auto b0 = machine->add_weight(1, 3);
+  auto w1 = machine->add_weight(3, 2);
+  auto b1 = machine->add_weight(1, 2);
+  auto w2 = machine->add_weight(2, 1);
+  auto b2 = machine->add_weight(1, 1);
+  auto layer0 = machine->add_layer(x, w0, b0);
+  auto layer1 = machine->add_layer(layer0, w1, b1);
+  auto layer2 = machine->add_layer(layer1, w2, b2);
+  machine->set_targets(layer2);
+
+  std::vector<double> xx, yy;
+  load_data(xx, yy);
+  machine->train(xx, yy);
+  std::vector<double> x1 = {1.1, -1, 7}, y1;
+  machine->predict(x1, y1);
+
+  std::cout << x1[0] << x1[1] << x1[2] << " ---> " << y1[0];
+}
+
 int main()
 {
+  compute();
   //tensorflow::port::InitMain(nullptr, 0, nullptr);
 
   tensorflow::Scope scope = tensorflow::Scope::NewRootScope();
 
   auto x = tensorflow::ops::Placeholder(scope, tensorflow::DT_FLOAT);
+  tensorflow::Input xx1 = x;
   auto y = tensorflow::ops::Placeholder(scope, tensorflow::DT_FLOAT);
 
   // weights init
@@ -82,7 +123,9 @@ int main()
   { w1.w_, w2.w_, w3.w_, b1.w_, b2.w_, b3.w_ };
 
   // layers
-  auto layer_1 = make_layer(scope, x, w1.w_, b1.w_);
+  tensorflow::Input www1 = w1.w_;
+  tensorflow::Input bbb1 = b1.w_;
+  auto layer_1 = make_layer(scope, xx1, www1, bbb1);
   auto layer_2 = make_layer(scope, layer_1, w2.w_, b2.w_);
   auto layer_3 = make_layer(scope, layer_2, w3.w_, b3.w_);
 

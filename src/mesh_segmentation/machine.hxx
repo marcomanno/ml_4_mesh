@@ -24,7 +24,7 @@ struct IMachine
   virtual tensorflow::Input make_input(int _rows) = 0;
   virtual tensorflow::Input make_output(int _rows) = 0;
   virtual tensorflow::Input add_weight(int _m, int _n) = 0;
-  virtual tensorflow::ops::Tanh add_layer(
+  virtual tensorflow::Input add_layer(
     tensorflow::Input& _X,
     tensorflow::Input& _A,
     tensorflow::Input& _B) = 0;

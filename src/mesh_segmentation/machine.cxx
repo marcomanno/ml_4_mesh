@@ -1,3 +1,4 @@
+#pragma optimize ("", off)
 #include "machine.hxx"
 
 #include "tensorflow/core/framework/types.h"
@@ -24,7 +25,7 @@ struct Machine : public IMachine
   tensorflow::Input make_input(int _rows) override;
   tensorflow::Input make_output(int _rows) override;
   tensorflow::Input add_weight(int _m, int _n) override;
-  tensorflow::ops::Tanh add_layer(
+  tensorflow::Input add_layer(
     tensorflow::Input& _X,
     tensorflow::Input& _A,
     tensorflow::Input& _B) override;
@@ -38,6 +39,7 @@ private:
   tensorflow::ClientSession session_;
 
   std::shared_ptr<tensorflow::ops::Placeholder> x_, y_;
+  tensorflow::int64 x_size_ = 0, y_size_ = 0;
 
   tensorflow::ops::Cast val_0_01_ = 
     tensorflow::ops::Cast(scope_, 0.01, tensorflow::DT_DOUBLE);
@@ -45,9 +47,11 @@ private:
   tensorflow::OutputList weights_;
   tensorflow::Output loss_;
   std::vector<tensorflow::Output> apply_grad_;
+  tensorflow::Output out_layer_;
 
   void add_place_holder(int _rows, std::shared_ptr<tensorflow::ops::Placeholder>& _obj);
-
+  auto x_size() const { return x_size_; }
+  auto y_size() const { return y_size_; }
 };
 
 std::shared_ptr<IMachine> IMachine::make()
@@ -57,13 +61,13 @@ std::shared_ptr<IMachine> IMachine::make()
 
 tensorflow::Input Machine::make_input(int _rows)
 {
-  add_place_holder(_rows, x_);
+  add_place_holder(x_size_ = _rows, x_);
   return *x_;
 }
 
 tensorflow::Input Machine::make_output(int _rows)
 {
-  add_place_holder(_rows, y_);
+  add_place_holder(y_size_ = _rows, y_);
   return *y_;
 }
 
@@ -74,7 +78,7 @@ void Machine::add_place_holder(
   _obj.reset(new tensorflow::ops::Placeholder(
       scope_, 
       tensorflow::DT_DOUBLE,
-      attr.Shape({ _rows, 1 })));
+      attr.Shape({ 1, _rows })));
 }
 
 tensorflow::Input Machine::add_weight(int _m, int _n)
@@ -88,14 +92,15 @@ tensorflow::Input Machine::add_weight(int _m, int _n)
   return w;
 }
 
-tensorflow::ops::Tanh Machine::add_layer(
+tensorflow::Input Machine::add_layer(
   tensorflow::Input& _X,
   tensorflow::Input& _A,
   tensorflow::Input& _B)
 {
-  return tensorflow::ops::Tanh(
+  auto layer = tensorflow::ops::Tanh(
     scope_,
     tensorflow::ops::Add(scope_, tensorflow::ops::MatMul(scope_, _X, _A), _B));
+  return layer;
 }
 
 tensorflow::Input Machine::set_targets(tensorflow::Input& _layer)
@@ -125,22 +130,23 @@ tensorflow::Input Machine::set_targets(tensorflow::Input& _layer)
     apply_grad_.push_back(tensorflow::ops::ApplyGradientDescent(
       scope_, weights_[i], val_0_01_, { grad_outputs[i] }));
   }
+  out_layer_ =  tensorflow::Output(_layer.node());
   return loss_;
 }
 
 void Machine::train(const std::vector<double>& _in, const std::vector<double>& _out)
 {
-  auto in_rows = tensorflow::Input((*x_)).tensor().dim_size(0);
+  auto in_rows = x_size();
   tensorflow::Tensor x_data(
     tensorflow::DT_DOUBLE,
     tensorflow::TensorShape{ static_cast<int>(_in.size()) / in_rows, in_rows });
-  std::copy(_in.begin(), _in.end(), x_data.flat<float>().data());
+  std::copy(_in.begin(), _in.end(), x_data.flat<double>().data());
 
-  auto out_rows = tensorflow::Input((*y_)).tensor().dim_size(0);
+  auto out_rows = y_size();
   tensorflow::Tensor y_data(
     tensorflow::DT_DOUBLE,
     tensorflow::TensorShape{ static_cast<int>(_out.size() / out_rows), out_rows });
-  std::copy(_out.begin(), _out.end(), y_data.flat<float>().data());
+  std::copy(_out.begin(), _out.end(), y_data.flat<double>().data());
 
   // training steps
   for (int i = 0; i < 5000; ++i) {
@@ -155,15 +161,14 @@ void Machine::train(const std::vector<double>& _in, const std::vector<double>& _
   }
 }
 
-void Machine::predict(const std::vector<double>& _in, std::vector<double> &_out)
+void Machine::predict(const std::vector<double>& _in, std::vector<double>& _out)
 {
-  tensorflow::Tensor x_0(tensorflow::DataTypeToEnum<float>::v(), tensorflow::TensorShape{ 1, 3 });
-  x_0.flat<float>().data()[0] = 1.1f;
-  x_0.flat<float>().data()[1] = -1;
-  x_0.flat<float>().data()[2] = 7.f;
-
+  tensorflow::Tensor x_0(tensorflow::DataTypeToEnum<double>::v(), tensorflow::TensorShape{ 1, x_size() });
+  std::copy(_in.begin(), _in.end(), x_0.flat<double>().data());
   std::vector<tensorflow::Tensor> outputs;
-  TF_CHECK_OK(session.Run({ { x, x_0 } }, { layer_3 }, &outputs));
+  TF_CHECK_OK(session_.Run({ { *x_, x_0 } }, { out_layer_ }, &outputs));
+  _out.resize(y_size());
+  std::copy_n(outputs[0].scalar<double>().data(), outputs[0].dim_size(0), _out.begin());
 }
 
 void Machine::store(const char* _flnm)
