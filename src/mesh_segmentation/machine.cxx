@@ -154,7 +154,7 @@ void Machine::train(const std::vector<double>& _in, const std::vector<double>& _
     {
       std::vector<tensorflow::Tensor> outputs;
       TF_CHECK_OK(session_.Run({ { *x_, x_data }, { *y_, y_data } }, { loss_ }, &outputs));
-      std::cout << "Loss after " << i << " steps " << outputs[0].scalar<float>() << std::endl;
+      std::cout << "Loss after " << i << " steps " << outputs[0].scalar<double>() << std::endl;
     }
     // nullptr because the output from the run is useless
     TF_CHECK_OK(session_.Run({ { *x_, x_data }, { *y_, y_data } }, apply_grad_, nullptr));

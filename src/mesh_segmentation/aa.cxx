@@ -95,7 +95,7 @@ void compute()
   std::vector<double> x1 = {1.1, -1, 7}, y1;
   machine->predict(x1, y1);
 
-  std::cout << x1[0] << x1[1] << x1[2] << " ---> " << y1[0];
+  std::cout << x1[0] << " " << x1[1] << " " << x1[2] << " ---> " << y1[0];
 }
 
 int main()
