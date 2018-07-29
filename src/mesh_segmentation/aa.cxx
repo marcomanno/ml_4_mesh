@@ -75,7 +75,8 @@ void load_data(std::vector<typeT> & _xx, std::vector<typeT>& _yy)
 
 void compute()
 {
-  auto machine = ML::IMachine::make();
+  using RealType = float;
+  auto machine = ML::IMachine<RealType>::make();
   auto x = machine->make_input(3);
   auto y = machine->make_output(1);
   auto w0 = machine->add_weight(3, 3);
@@ -89,10 +90,10 @@ void compute()
   auto layer2 = machine->add_layer(layer1, w2, b2);
   machine->set_targets(layer2);
 
-  std::vector<double> xx, yy;
+  std::vector<RealType> xx, yy;
   load_data(xx, yy);
   machine->train(xx, yy);
-  std::vector<double> x1 = {1.1, -1, 7}, y1;
+  std::vector<RealType> x1 = {1.25, -1, 7}, y1;
   machine->predict(x1, y1);
 
   std::cout << x1[0] << " " << x1[1] << " " << x1[2] << " ---> " << y1[0];
