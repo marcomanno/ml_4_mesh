@@ -35,7 +35,8 @@ struct IMachine
   virtual void predict(
     const std::vector<RealT>& _in,
     std::vector<RealT> &_out) = 0;
-  virtual void store(const char* _flnm) = 0;
+  virtual void save(const char* _flnm) = 0;
+  virtual void load(const char* _flnm) = 0;
 };
 } // namespace ML
 

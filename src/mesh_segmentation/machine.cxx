@@ -35,7 +35,8 @@ struct Machine : public IMachine<RealT>
   void train(const std::vector<RealT>& _in, const std::vector<RealT>& _out) override;
 
   void predict(const std::vector<RealT>& _in, std::vector<RealT> &_out) override;
-  void store(const char* _flnm) override;
+  void save(const char* _flnm) override;
+  void load(const char* _flnm) override;
 private:
   tensorflow::Scope scope_ = tensorflow::Scope::NewRootScope();
   tensorflow::ClientSession session_;
@@ -187,9 +188,34 @@ Machine<RealT>::predict(const std::vector<RealT>& _in, std::vector<RealT>& _out)
 }
 
 template <class RealT>
-void Machine<RealT>::store(const char* _flnm)
+void Machine<RealT>::save(const char* _flnm)
 {
+  // save
+  tensorflow::GraphDef graph_def;
+  scope_.ToGraphDef(&graph_def);
+  tensorflow::WriteBinaryProto(tensorflow::Env::Default(),
+                               _flnm, graph_def);
 
+#if 0
+  tensorflow::Tensor checkpointPathTensor(tensorflow::DT_STRING, tensorflow::TensorShape());
+  checkpointPathTensor.scalar<std::string>()() = _flnm;
+  //tensor_dict feed_dict = { { graph_def.saver_def().filename_tensor_name(), checkpointPathTensor } };
+  auto status = session_.Run(
+    { { graph.saver_def().filename_tensor_name(), checkpointPathTensor } }, 
+    {}, { graph.saver_def().save_tensor_name() }, nullptr);
+#endif
+}
+
+template <class RealT>
+void Machine<RealT>::load(const char* _flnm)
+{
+#if 0
+  // restore
+  tensorflow::Tensor checkpointPathTensor(tensorflow::DT_STRING, tensorflow::TensorShape());
+  checkpointPathTensor.scalar<std::string>()() = "some/path";
+  tensor_dict feed_dict = { { graph_def.saver_def().filename_tensor_name(), checkpointPathTensor } };
+  status = sess->Run(feed_dict, {}, { graph_def.saver_def().restore_op_name() }, nullptr);
+#endif
 }
 
 
