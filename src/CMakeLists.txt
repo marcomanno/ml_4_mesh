@@ -6,9 +6,17 @@ cmake_minimum_required (VERSION 3.8)
 project (TensorFlowExperiments)
 
 if(MSVC)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++latest")
+add_definitions(-D_USE_MATH_DEFINES)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++latest /W0")
 endif(MSVC)
 
 # Include sub-projects.
 #add_subdirectory(tensorflow)
-add_subdirectory(mesh_segmentation)
+add_subdirectory(Utils)
+add_subdirectory(Geo)
+add_subdirectory(Import)
+add_subdirectory(Topology)
+add_subdirectory(MeshSegmentation)
+
+
+
