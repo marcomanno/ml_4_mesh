@@ -11,7 +11,7 @@
 #include <numeric>
 
 //#define DEBUG_PolygonTriangularization
-#include "Import/import.hh"
+#include "Import/save_obj.hh"
 
 namespace Geo
 {

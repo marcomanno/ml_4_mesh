@@ -16,6 +16,7 @@ add_subdirectory(Utils)
 add_subdirectory(Geo)
 add_subdirectory(Import)
 add_subdirectory(Topology)
+add_subdirectory(PolygonTriangularization)
 add_subdirectory(MeshSegmentation)
 
 

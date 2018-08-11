@@ -15,7 +15,7 @@ file(GLOB CXX_FILES ${CMAKE_CURRENT_SOURCE_DIR} "*.cxx")
 add_executable(MeshSegmentation ${CXX_FILES} ${HXX_FILES})
 target_link_libraries(MeshSegmentation 
   "${CMAKE_CURRENT_SOURCE_DIR}/../tensorflow/lib/tensorflow.lib"
-  Import Topology Geo)
+  Import Topology Geo PolygonTriangularization)
 target_include_directories(MeshSegmentation PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/../tensorflow/include")
   
