@@ -8,6 +8,7 @@
 #include <fstream>
 #include <filesystem>
 #include <map>
+#include <set>
 #include <sstream>
 
 namespace fs = std::filesystem;
@@ -36,6 +37,110 @@ Geo::VectorD3 get_direction(
   cv.get(0)->geom(pnts[0]);
   return pnts[1] - pnts[0];
 }
+
+struct FaceInfo
+{
+  FaceInfo() : valid_(false) {}
+  FaceInfo(const Topo::Wrap<Topo::Type::FACE>& _f,
+           const Topo::Wrap<Topo::Type::COEDGE>& _c,
+           bool _valid = true) :
+    face_(_f), coe_(_c), valid_(_valid) {}
+  Topo::Wrap<Topo::Type::FACE> face_;
+  Topo::Wrap<Topo::Type::COEDGE> coe_;
+  bool valid_;
+};
+
+struct MachineData
+{
+  std::set<Topo::Wrap<Topo::Type::EDGE>> edges_;
+  std::vector<FaceInfo> faces_;
+  std::vector<double> input_var_;
+  std::map<Topo::Wrap<Topo::Type::COEDGE>, Angles>& mesh_angles_;
+
+  MachineData(std::map<Topo::Wrap<Topo::Type::COEDGE>, Angles>& _mesh_angles) :
+    mesh_angles_(_mesh_angles) {}
+  void init(Topo::Wrap<Topo::Type::EDGE> _ed)
+  {
+    edges_.insert(_ed);
+    Topo::Iterator<Topo::Type::EDGE, Topo::Type::COEDGE> ec(_ed);
+    for (auto c : ec)
+    {
+      Topo::Iterator<Topo::Type::COEDGE, Topo::Type::FACE> cf(c);
+      faces_.emplace_back(cf.get(0), c, true);
+    }
+  }
+
+  void add_invalid(std::vector<FaceInfo>& _new_faces)
+  {
+    _new_faces.emplace_back();
+    _new_faces.emplace_back();
+    input_var_.insert(input_var_.end(), 4, 0.);
+  };
+
+  bool add_element(const FaceInfo& _fi)
+  {
+    if (!_fi.valid_)
+    {
+      input_var_.insert(input_var_.end(), 4, 0.);
+      return false;
+    }
+    Topo::Iterator<Topo::Type::COEDGE, Topo::Type::EDGE> ce(_fi.coe_);
+    auto edge = ce.get(0);
+    if (!edges_.insert(edge).second)
+    {
+      input_var_.insert(input_var_.end(), 4, 0.);
+      return false;
+    }
+    const auto& angs = mesh_angles_[_fi.coe_];
+    input_var_.push_back(angs.edge_angle_);
+    input_var_.push_back(angs.init_angle_);
+  }
+
+  void process()
+  {
+    if (faces_.size() > 1024)
+      return;
+    std::vector<FaceInfo> new_faces;
+    for (auto& fi : faces_)
+    {
+      if (!add_element(fi))
+      {
+        new_faces.emplace_back();
+        new_faces.emplace_back();
+        continue;
+      }
+
+      Topo::Iterator<Topo::Type::FACE, Topo::Type::COEDGE> fc(fi.face_);
+
+      std::vector<Topo::Wrap<Topo::Type::COEDGE>> coeds;
+      bool rev = false;
+      for (auto c : fc)
+      {
+        if (c != fi.coe_)
+          coeds.push_back(c);
+        else
+          rev = coeds.size() == 1;
+      }
+      if (rev)
+        std::swap(coeds[0], coeds[1]);
+      for (auto cc : coeds)
+      {
+        const auto& angs = mesh_angles_[cc];
+        input_var_.push_back(angs.init_angle_);
+        Topo::Iterator<Topo::Type::COEDGE, Topo::Type::EDGE> ce(cc);
+        if (!edges_.insert(ce.get(0)).second)
+        {
+          new_faces.emplace_back();
+          continue;
+        }
+        Topo::Iterator<Topo::Type::COEDGE, Topo::Type::FACE> cf(cc);
+        new_faces.emplace_back(cf.get(0), cc);
+      }
+    }
+    faces_ = std::move(new_faces);
+    process();
+  }
+};
 
 static void process(const fs::path& _mesh_file)
 {
@@ -85,6 +190,14 @@ static void process(const fs::path& _mesh_file)
       coe_dat.edge_angle_ = ang1;
     }
   }
+  Topo::Iterator<Topo::Type::BODY, Topo::Type::EDGE> be(body);
+  for (auto ed : be)
+  {
+    MachineData md(mesh_angles);
+    md.init(ed);
+    md.process();
+  }
+
 
 }
 
