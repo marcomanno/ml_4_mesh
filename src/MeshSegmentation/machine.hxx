@@ -1,5 +1,6 @@
 #pragma once
 
+#include "tensorflow/include/tensorflow/cc/framework/ops.h"
 
 #include <memory>
 #include <vector>

@@ -1,7 +1,11 @@
 
 #include "Import/import.hh"
 #include "Topology/iterator.hh"
+
+#include "MeshSegmentation/machine.hxx"
+
 #include "Topology/geom.hh"
+#include "Topology/shared.hh"
 
 #include <array>
 #include <iomanip>
@@ -12,6 +16,7 @@
 #include <sstream>
 
 namespace fs = std::filesystem;
+static const size_t INPUT_SIZE = 1024;
 
 static std::string convert(const fs::path& _path)
 {
@@ -98,7 +103,7 @@ struct MachineData
 
   void process()
   {
-    if (faces_.size() > 1024)
+    if (faces_.size() > INPUT_SIZE)
       return;
     std::vector<FaceInfo> new_faces;
     for (auto& fi : faces_)
@@ -140,19 +145,26 @@ struct MachineData
     faces_ = std::move(new_faces);
     process();
   }
+  void train(bool _is_on_boundary, ML::IMachine<double>& _mach)
+  {
+    std::vector<double> out(1, _is_on_boundary ? 1. : 0.);
+    _mach.train(input_var_, out);
+  }
 };
 
-static void process(const fs::path& _mesh_file)
+static void process(const fs::path& _mesh_file, ML::IMachine<double>& _mach)
 {
   auto body = IO::load_obj(convert(_mesh_file).c_str());
-  std::vector<Topo::Wrap<Topo::Type::VERTEX>> boundary_vertices;
+  std::set<Topo::Wrap<Topo::Type::EDGE>> boundary_edges;
   {
+    std::vector<Topo::Wrap<Topo::Type::VERTEX>> boundary_vertices;
     std::vector<size_t> bndrs;
     auto boundaries = _mesh_file;
     boundaries.replace_extension(".bnd");
     std::ifstream bndr_stream(convert(boundaries).c_str());
     while (!bndr_stream.eof() && !bndr_stream.bad())
       bndr_stream >> bndrs.emplace_back();
+    std::vector<size_t> bndr_edges = bndrs;
     std::sort(bndrs.begin(), bndrs.end());
     bndrs.erase(std::unique(bndrs.begin(), bndrs.end()), bndrs.end());
     Topo::Iterator<Topo::Type::BODY, Topo::Type::VERTEX> bv(body);
@@ -162,6 +174,15 @@ static void process(const fs::path& _mesh_file)
     std::sort(all_vertices.begin(), all_vertices.end());
     for (auto v_idx : bndrs)
       boundary_vertices.push_back(all_vertices[v_idx]);
+    for (size_t i = 1; i < bndr_edges.size(); i += 2)
+    {
+      auto v0 = boundary_vertices[bndr_edges[i - 1]];
+      auto v1 = boundary_vertices[bndr_edges[i]];
+      auto eds = Topo::shared_entities<Topo::Type::VERTEX, Topo::Type::EDGE>
+        (v0, v1);
+      for (auto ed : eds)
+        boundary_edges.insert(ed);
+    }
   }
   std::map<Topo::Wrap<Topo::Type::COEDGE>, Angles> mesh_angles;
   Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE> bf(body);
@@ -193,15 +214,16 @@ static void process(const fs::path& _mesh_file)
   Topo::Iterator<Topo::Type::BODY, Topo::Type::EDGE> be(body);
   for (auto ed : be)
   {
+    bool is_boundary = 
+      boundary_edges.find(ed) != boundary_edges.end();
     MachineData md(mesh_angles);
     md.init(ed);
     md.process();
+    md.train(is_boundary, _mach);
   }
-
-
 }
 
-void train_mesh_segmentation(const fs::path& _folder)
+void train_mesh_segmentation(const fs::path& _folder, ML::IMachine<double>& _mach)
 {
   if (!fs::exists(_folder))
     return;
@@ -209,13 +231,20 @@ void train_mesh_segmentation(const fs::path& _folder)
   for (fs::directory_iterator itr(_folder); itr != end_itr; ++itr)
   {
     if (fs::is_directory(itr->status()))
-      train_mesh_segmentation(itr->path());
+      train_mesh_segmentation(itr->path(), _mach);
     else if (itr->path().extension() == ".obj1")
-      process(itr->path());
+      process(itr->path(), _mach);
   }
 }
 
 void train_mesh_segmentation(const char* _folder)
 {
-  train_mesh_segmentation(fs::path(_folder));
+  auto machine = ML::IMachine<double>::make();
+  auto x = machine->make_input(INPUT_SIZE);
+  auto y = machine->make_output(1);
+  auto w0 = machine->add_weight(1, INPUT_SIZE);
+  auto b0 = machine->add_weight(1, 1);
+  auto layer0 = machine->add_layer(x, w0, b0);
+  machine->set_targets(layer0);
+  train_mesh_segmentation(fs::path(_folder), *machine);
 }
