@@ -4,6 +4,8 @@
 
 #include "aa.hxx"
 
+#include "MeshSegmentation/mesh_training.hxx"
+
 #include "tensorflow/core/framework/types.h"
 #include "tensorflow/core/platform/init_main.h"
 #include "tensorflow/core/public/session.h"
@@ -101,6 +103,7 @@ void compute()
 
 int main()
 {
+  MeshSegmentation::train_mesh_segmentation("C:/Users/marco/Project/ml_4_mesh/src/Test/Data");
   compute();
   //tensorflow::port::InitMain(nullptr, 0, nullptr);
 

@@ -16,6 +16,9 @@
 #include <sstream>
 
 namespace fs = std::filesystem;
+
+namespace
+{
 static const size_t INPUT_SIZE = 1024;
 
 static std::string convert(const fs::path& _path)
@@ -214,7 +217,7 @@ static void process(const fs::path& _mesh_file, ML::IMachine<double>& _mach)
   Topo::Iterator<Topo::Type::BODY, Topo::Type::EDGE> be(body);
   for (auto ed : be)
   {
-    bool is_boundary = 
+    bool is_boundary =
       boundary_edges.find(ed) != boundary_edges.end();
     MachineData md(mesh_angles);
     md.init(ed);
@@ -223,7 +226,8 @@ static void process(const fs::path& _mesh_file, ML::IMachine<double>& _mach)
   }
 }
 
-void train_mesh_segmentation(const fs::path& _folder, ML::IMachine<double>& _mach)
+void train_mesh_segmentation_on_folder(
+  const fs::path& _folder, ML::IMachine<double>& _mach)
 {
   if (!fs::exists(_folder))
     return;
@@ -231,12 +235,15 @@ void train_mesh_segmentation(const fs::path& _folder, ML::IMachine<double>& _mac
   for (fs::directory_iterator itr(_folder); itr != end_itr; ++itr)
   {
     if (fs::is_directory(itr->status()))
-      train_mesh_segmentation(itr->path(), _mach);
+      train_mesh_segmentation_on_folder(itr->path(), _mach);
     else if (itr->path().extension() == ".obj1")
       process(itr->path(), _mach);
   }
 }
+} // namespace
 
+namespace MeshSegmentation
+{
 void train_mesh_segmentation(const char* _folder)
 {
   auto machine = ML::IMachine<double>::make();
@@ -246,5 +253,6 @@ void train_mesh_segmentation(const char* _folder)
   auto b0 = machine->add_weight(1, 1);
   auto layer0 = machine->add_layer(x, w0, b0);
   machine->set_targets(layer0);
-  train_mesh_segmentation(fs::path(_folder), *machine);
+  train_mesh_segmentation_on_folder(fs::path(_folder), *machine);
 }
+} // namespace MeshSegmentation
