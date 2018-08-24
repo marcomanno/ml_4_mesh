@@ -44,7 +44,7 @@ private:
   std::shared_ptr<tensorflow::ops::Placeholder> x_, y_;
   tensorflow::int64 x_size_ = 0, y_size_ = 0;
 
-  tensorflow::ops::Cast val_0_01_ = 
+  tensorflow::ops::Cast val_0_01_ =
     tensorflow::ops::Cast(scope_, 0.01, TfType);
 
   tensorflow::OutputList weights_;

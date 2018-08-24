@@ -1,4 +1,4 @@
-
+#pragma optimize ("", off)
 #include "Import/import.hh"
 #include "Topology/iterator.hh"
 
@@ -39,7 +39,7 @@ struct Angles
 Geo::VectorD3 get_direction(
   Topo::Wrap<Topo::Type::COEDGE> _a)
 {
-  Topo::Iterator<Topo::Type::COEDGE, Topo::Type::VERTEX> cv;
+  Topo::Iterator<Topo::Type::COEDGE, Topo::Type::VERTEX> cv(_a);
   Geo::VectorD3 pnts[2];
   cv.get(1)->geom(pnts[1]);
   cv.get(0)->geom(pnts[0]);
@@ -69,7 +69,7 @@ struct MachineData
     mesh_angles_(_mesh_angles) {}
   void init(Topo::Wrap<Topo::Type::EDGE> _ed)
   {
-    edges_.insert(_ed);
+    //edges_.insert(_ed);
     Topo::Iterator<Topo::Type::EDGE, Topo::Type::COEDGE> ec(_ed);
     for (auto c : ec)
     {
@@ -236,7 +236,7 @@ void train_mesh_segmentation_on_folder(
   {
     if (fs::is_directory(itr->status()))
       train_mesh_segmentation_on_folder(itr->path(), _mach);
-    else if (itr->path().extension() == ".obj1")
+    else if (itr->path().extension() == ".obj")
       process(itr->path(), _mach);
   }
 }
@@ -249,7 +249,7 @@ void train_mesh_segmentation(const char* _folder)
   auto machine = ML::IMachine<double>::make();
   auto x = machine->make_input(INPUT_SIZE);
   auto y = machine->make_output(1);
-  auto w0 = machine->add_weight(1, INPUT_SIZE);
+  auto w0 = machine->add_weight(INPUT_SIZE, 1);
   auto b0 = machine->add_weight(1, 1);
   auto layer0 = machine->add_layer(x, w0, b0);
   machine->set_targets(layer0);
