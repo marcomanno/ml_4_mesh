@@ -164,7 +164,7 @@ Machine<RealT>::train(const std::vector<RealT>& _in, const std::vector<RealT>& _
   std::copy(_out.begin(), _out.end(), y_data.flat<RealT>().data());
 
   // training steps
-  for (int i = 0; i < 5000; ++i) {
+  for (int i = 0; i <= 50000; ++i) {
     if (i % 100 == 0)
     {
       std::vector<tensorflow::Tensor> outputs;

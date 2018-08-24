@@ -36,6 +36,12 @@ struct Angles
   double edge_angle_ = -1; // between 0 and 2 * Pi
 };
 
+struct TrainData
+{
+  std::vector<double> in_;
+  std::vector<double> out_;
+};
+
 Geo::VectorD3 get_direction(
   Topo::Wrap<Topo::Type::COEDGE> _a)
 {
@@ -149,14 +155,14 @@ struct MachineData
     faces_ = std::move(new_faces);
     process();
   }
-  void train(bool _is_on_boundary, ML::IMachine<double>& _machine)
+  void train(bool _is_on_boundary, TrainData& _tr_dat)
   {
-    std::vector<double> out(1, _is_on_boundary ? 1. : 0.);
-    _machine.train(input_var_, out);
+    _tr_dat.in_.insert(_tr_dat.in_.end(), input_var_.begin(), input_var_.end());
+    _tr_dat.out_.push_back(_is_on_boundary ? 1. : 0.);
   }
 };
 
-static void process(const fs::path& _mesh_file, ML::IMachine<double>& _machine)
+static void process(const fs::path& _mesh_file, TrainData& _tr_dat)
 {
   auto body = IO::load_obj(convert(_mesh_file).c_str());
   std::set<Topo::Wrap<Topo::Type::EDGE>> boundary_edges;
@@ -223,12 +229,12 @@ static void process(const fs::path& _mesh_file, ML::IMachine<double>& _machine)
     MachineData md(mesh_angles);
     md.init(ed);
     md.process();
-    md.train(is_boundary, _machine);
+    md.train(is_boundary, _tr_dat);
   }
 }
 
 void train_mesh_segmentation_on_folder(
-  const fs::path& _folder, ML::IMachine<double>& _machine)
+  const fs::path& _folder, TrainData& _tr_dat)
 {
   if (!fs::exists(_folder))
     return;
@@ -236,9 +242,9 @@ void train_mesh_segmentation_on_folder(
   for (fs::directory_iterator itr(_folder); itr != end_itr; ++itr)
   {
     if (fs::is_directory(itr->status()))
-      train_mesh_segmentation_on_folder(itr->path(), _machine);
+      train_mesh_segmentation_on_folder(itr->path(), _tr_dat);
     else if (itr->path().extension() == ".obj")
-      process(itr->path(), _machine);
+      process(itr->path(), _tr_dat);
   }
 }
 } // namespace
@@ -254,6 +260,8 @@ void train_mesh_segmentation(const char* _folder)
   auto b0 = machine->add_weight(1, 1);
   auto layer0 = machine->add_layer(x, w0, b0);
   machine->set_targets(layer0);
-  train_mesh_segmentation_on_folder(fs::path(_folder), *machine);
+  TrainData tr_dat;
+  train_mesh_segmentation_on_folder(fs::path(_folder), tr_dat);
+  machine->train(tr_dat.in_, tr_dat.out_);
 }
 } // namespace MeshSegmentation
