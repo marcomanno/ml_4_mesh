@@ -19,7 +19,7 @@ namespace fs = std::filesystem;
 
 namespace
 {
-static const size_t INPUT_SIZE = 1024;
+static const size_t INPUT_SIZE = 1016;
 
 static std::string convert(const fs::path& _path)
 {
@@ -102,11 +102,12 @@ struct MachineData
     const auto& angs = mesh_angles_[_fi.coe_];
     input_var_.push_back(angs.edge_angle_);
     input_var_.push_back(angs.init_angle_);
+    return true;
   }
 
   void process()
   {
-    if (faces_.size() > INPUT_SIZE)
+    if (input_var_.size() >= INPUT_SIZE)
       return;
     std::vector<FaceInfo> new_faces;
     for (auto& fi : faces_)
@@ -148,14 +149,14 @@ struct MachineData
     faces_ = std::move(new_faces);
     process();
   }
-  void train(bool _is_on_boundary, ML::IMachine<double>& _mach)
+  void train(bool _is_on_boundary, ML::IMachine<double>& _machine)
   {
     std::vector<double> out(1, _is_on_boundary ? 1. : 0.);
-    _mach.train(input_var_, out);
+    _machine.train(input_var_, out);
   }
 };
 
-static void process(const fs::path& _mesh_file, ML::IMachine<double>& _mach)
+static void process(const fs::path& _mesh_file, ML::IMachine<double>& _machine)
 {
   auto body = IO::load_obj(convert(_mesh_file).c_str());
   std::set<Topo::Wrap<Topo::Type::EDGE>> boundary_edges;
@@ -222,12 +223,12 @@ static void process(const fs::path& _mesh_file, ML::IMachine<double>& _mach)
     MachineData md(mesh_angles);
     md.init(ed);
     md.process();
-    md.train(is_boundary, _mach);
+    md.train(is_boundary, _machine);
   }
 }
 
 void train_mesh_segmentation_on_folder(
-  const fs::path& _folder, ML::IMachine<double>& _mach)
+  const fs::path& _folder, ML::IMachine<double>& _machine)
 {
   if (!fs::exists(_folder))
     return;
@@ -235,9 +236,9 @@ void train_mesh_segmentation_on_folder(
   for (fs::directory_iterator itr(_folder); itr != end_itr; ++itr)
   {
     if (fs::is_directory(itr->status()))
-      train_mesh_segmentation_on_folder(itr->path(), _mach);
+      train_mesh_segmentation_on_folder(itr->path(), _machine);
     else if (itr->path().extension() == ".obj")
-      process(itr->path(), _mach);
+      process(itr->path(), _machine);
   }
 }
 } // namespace
