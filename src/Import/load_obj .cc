@@ -10,7 +10,9 @@
 
 namespace IO {
 
-Topo::Wrap<Topo::Type::BODY> load_obj(const char* _flnm)
+Topo::Wrap<Topo::Type::BODY> load_obj(
+  const char* _flnm,
+  std::map<Topo::Wrap<Topo::Type::FACE>, int>* _face_groups)
 {
   Topo::Wrap<Topo::Type::BODY> new_body;
   std::ifstream fstr(_flnm);
@@ -20,6 +22,7 @@ Topo::Wrap<Topo::Type::BODY> load_obj(const char* _flnm)
   std::vector<Topo::Wrap<Topo::Type::VERTEX>> verts;
 
   new_body.make<Topo::EE<Topo::Type::BODY>>();
+  int group = 1;
   while (std::getline(fstr, line))
   {
     if (line.size() < 3 || line[1] != ' ')
@@ -41,10 +44,12 @@ Topo::Wrap<Topo::Type::BODY> load_obj(const char* _flnm)
       Topo::Wrap<Topo::Type::FACE> face;
       face.make<Topo::EE<Topo::Type::FACE>>();
       new_body->insert_child(face.get());
+      if (_face_groups != nullptr)
+        (*_face_groups)[face] = group;
       int vert_idx;
       while (buf >> vert_idx)
       {
-        face->insert_child(verts[vert_idx-1].get());
+        face->insert_child(verts[vert_idx - 1].get());
         char c;
         while (buf >> c && c == '/')
         {
@@ -55,6 +60,8 @@ Topo::Wrap<Topo::Type::BODY> load_obj(const char* _flnm)
         buf.putback(c);
       }
     }
+    else if (line[0] == 'g')
+      ++group;
   }
   return new_body;
 }

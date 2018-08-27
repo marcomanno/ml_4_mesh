@@ -1,5 +1,5 @@
 #pragma optimize ("", off)
-#include "Import/import.hh"
+#include "Import/load_obj.hh"
 #include "Topology/iterator.hh"
 
 #include "MeshSegmentation/machine.hxx"
@@ -164,7 +164,8 @@ struct MachineData
 
 static void process(const fs::path& _mesh_file, TrainData& _tr_dat)
 {
-  auto body = IO::load_obj(convert(_mesh_file).c_str());
+  std::map<Topo::Wrap<Topo::Type::FACE>, int> face_groups;
+  auto body = IO::load_obj(convert(_mesh_file).c_str(), &face_groups);
   std::set<Topo::Wrap<Topo::Type::EDGE>> boundary_edges;
   {
     std::vector<Topo::Wrap<Topo::Type::VERTEX>> boundary_vertices;
@@ -172,7 +173,7 @@ static void process(const fs::path& _mesh_file, TrainData& _tr_dat)
     auto boundaries = _mesh_file;
     boundaries.replace_extension(".bnd");
     std::ifstream bndr_stream(convert(boundaries).c_str());
-    while (!bndr_stream.eof() && !bndr_stream.bad())
+    while (bndr_stream.good())
       bndr_stream >> bndrs.emplace_back();
     std::vector<size_t> bndr_edges = bndrs;
     std::sort(bndrs.begin(), bndrs.end());
@@ -192,6 +193,19 @@ static void process(const fs::path& _mesh_file, TrainData& _tr_dat)
         (v0, v1);
       for (auto ed : eds)
         boundary_edges.insert(ed);
+    }
+  }
+  if (boundary_edges.empty())
+  {
+    Topo::Iterator<Topo::Type::BODY, Topo::Type::EDGE> be(body);
+    for (auto ed : be)
+    {
+      Topo::Iterator<Topo::Type::EDGE, Topo::Type::FACE> ef(ed);
+      if (ef.size() == 2)
+      {
+        if (face_groups[ef.get(0)] != face_groups[ef.get(1)])
+          boundary_edges.insert(ed);
+      }
     }
   }
   std::map<Topo::Wrap<Topo::Type::COEDGE>, Angles> mesh_angles;
