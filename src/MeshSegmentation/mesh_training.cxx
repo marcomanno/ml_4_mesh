@@ -19,7 +19,7 @@ namespace fs = std::filesystem;
 
 namespace
 {
-static const size_t INPUT_SIZE = 1016;
+static const size_t INPUT_SIZE = 8; // 1016;
 
 static std::string convert(const fs::path& _path)
 {
@@ -98,13 +98,6 @@ struct MachineData
       input_var_.insert(input_var_.end(), 4, 0.);
       return false;
     }
-    Topo::Iterator<Topo::Type::COEDGE, Topo::Type::EDGE> ce(_fi.coe_);
-    auto edge = ce.get(0);
-    if (!edges_.insert(edge).second)
-    {
-      input_var_.insert(input_var_.end(), 4, 0.);
-      return false;
-    }
     const auto& angs = mesh_angles_[_fi.coe_];
     input_var_.push_back(angs.edge_angle_);
     input_var_.push_back(angs.init_angle_);
@@ -126,7 +119,6 @@ struct MachineData
       }
 
       Topo::Iterator<Topo::Type::FACE, Topo::Type::COEDGE> fc(fi.face_);
-
       std::vector<Topo::Wrap<Topo::Type::COEDGE>> coeds;
       bool rev = false;
       for (auto c : fc)
@@ -143,13 +135,18 @@ struct MachineData
         const auto& angs = mesh_angles_[cc];
         input_var_.push_back(angs.init_angle_);
         Topo::Iterator<Topo::Type::COEDGE, Topo::Type::EDGE> ce(cc);
-        if (!edges_.insert(ce.get(0)).second)
+        auto ed = ce.get(0);
+        if (!edges_.insert(ed).second)
         {
           new_faces.emplace_back();
           continue;
         }
-        Topo::Iterator<Topo::Type::COEDGE, Topo::Type::FACE> cf(cc);
-        new_faces.emplace_back(cf.get(0), cc);
+        Topo::Iterator<Topo::Type::EDGE, Topo::Type::COEDGE> ec(ed);
+        auto opp_coe = ec.get(0);
+        if (opp_coe == cc)
+          opp_coe = ec.get(1);
+        Topo::Iterator<Topo::Type::COEDGE, Topo::Type::FACE> cf(opp_coe);
+        new_faces.emplace_back(cf.get(0), opp_coe);
       }
     }
     faces_ = std::move(new_faces);
@@ -167,35 +164,6 @@ static void process(const fs::path& _mesh_file, TrainData& _tr_dat)
   std::map<Topo::Wrap<Topo::Type::FACE>, int> face_groups;
   auto body = IO::load_obj(convert(_mesh_file).c_str(), &face_groups);
   std::set<Topo::Wrap<Topo::Type::EDGE>> boundary_edges;
-  {
-    std::vector<Topo::Wrap<Topo::Type::VERTEX>> boundary_vertices;
-    std::vector<size_t> bndrs;
-    auto boundaries = _mesh_file;
-    boundaries.replace_extension(".bnd");
-    std::ifstream bndr_stream(convert(boundaries).c_str());
-    while (bndr_stream.good())
-      bndr_stream >> bndrs.emplace_back();
-    std::vector<size_t> bndr_edges = bndrs;
-    std::sort(bndrs.begin(), bndrs.end());
-    bndrs.erase(std::unique(bndrs.begin(), bndrs.end()), bndrs.end());
-    Topo::Iterator<Topo::Type::BODY, Topo::Type::VERTEX> bv(body);
-    std::vector<Topo::Wrap<Topo::Type::VERTEX>> all_vertices;
-    for (auto v : bv)
-      all_vertices.push_back(v);
-    std::sort(all_vertices.begin(), all_vertices.end());
-    for (auto v_idx : bndrs)
-      boundary_vertices.push_back(all_vertices[v_idx]);
-    for (size_t i = 1; i < bndr_edges.size(); i += 2)
-    {
-      auto v0 = boundary_vertices[bndr_edges[i - 1]];
-      auto v1 = boundary_vertices[bndr_edges[i]];
-      auto eds = Topo::shared_entities<Topo::Type::VERTEX, Topo::Type::EDGE>
-        (v0, v1);
-      for (auto ed : eds)
-        boundary_edges.insert(ed);
-    }
-  }
-  if (boundary_edges.empty())
   {
     Topo::Iterator<Topo::Type::BODY, Topo::Type::EDGE> be(body);
     for (auto ed : be)

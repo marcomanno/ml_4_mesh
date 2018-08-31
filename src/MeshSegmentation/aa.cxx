@@ -105,6 +105,7 @@ int main()
 {
   MeshSegmentation::train_mesh_segmentation("C:/Users/marco/Project/ml_4_mesh/src/Test/Data");
   compute();
+#if 0
   //tensorflow::port::InitMain(nullptr, 0, nullptr);
 
   tensorflow::Scope scope = tensorflow::Scope::NewRootScope();
@@ -209,5 +210,6 @@ int main()
   TF_CHECK_OK(session.Run({ { x, x_0} }, { layer_3 }, &outputs));
   std::cout << "DNN output: " << *outputs[0].scalar<float>().data() << std::endl;
   std::cout << "Price predicted " << *outputs[0].scalar<float>().data() << " euros" << std::endl;
+#endif
   return 0;
 }
