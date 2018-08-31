@@ -44,11 +44,8 @@ private:
   std::shared_ptr<tensorflow::ops::Placeholder> x_, y_;
   tensorflow::int64 x_size_ = 0, y_size_ = 0;
 
-  tensorflow::ops::Cast val_0_01_ =
-    tensorflow::ops::Cast(scope_, 0.01, TfType);
-
   tensorflow::OutputList weights_;
-  tensorflow::Output loss_;
+  tensorflow::Output loss_, real_loss_;
   std::vector<tensorflow::Output> apply_grad_;
   tensorflow::Output out_layer_;
 
@@ -123,26 +120,35 @@ Machine<RealT>::set_targets(tensorflow::Input& _layer)
   tensorflow::OutputList l2_losses;
   for (auto& w : weights_)
     l2_losses.push_back(tensorflow::ops::L2Loss(scope_, w));
-  auto regularization = tensorflow::ops::AddN(
-    scope_, l2_losses);
+  auto regularization = tensorflow::ops::AddN(scope_, l2_losses);
 
+#if 1
+  real_loss_ = tensorflow::ops::ReduceMean(scope_,
+    tensorflow::ops::Square(scope_,
+      tensorflow::ops::Sub(scope_, _layer, *y_)),
+    { 0, 1 });
+#else
+  real_loss_ = tensorflow::ops::ReduceSum(
+    scope_,
+    tensorflow::ops::Square(
+      scope_,
+      tensorflow::ops::Sub(scope_, _layer, *y_)),
+    { 0, 1 });
+#endif
+  tensorflow::ops::Cast reg_coeff = tensorflow::ops::Cast(scope_, 0.01, TfType);
   loss_ = tensorflow::ops::Add(
     scope_,
-    tensorflow::ops::ReduceMean(
-      scope_,
-      tensorflow::ops::Square(
-        scope_, 
-        tensorflow::ops::Sub(scope_, _layer, *y_)), 
-      { 0, 1 }),
-    tensorflow::ops::Mul(scope_, val_0_01_, regularization));
+    real_loss_,
+    tensorflow::ops::Mul(scope_, reg_coeff, regularization));
 
   // add the gradients operations to the graph
+  tensorflow::ops::Cast grad_coeff = tensorflow::ops::Cast(scope_, 0.01, TfType);
   std::vector<tensorflow::Output> grad_outputs;
   tensorflow::AddSymbolicGradients(scope_, { loss_ }, weights_, &grad_outputs);
   for (int i = 0; i < std::size(weights_); ++i)
   {
     apply_grad_.push_back(tensorflow::ops::ApplyGradientDescent(
-      scope_, weights_[i], val_0_01_, { grad_outputs[i] }));
+      scope_, weights_[i], grad_coeff, { grad_outputs[i] }));
   }
   out_layer_ =  tensorflow::Output(_layer.node());
   return loss_;
@@ -164,11 +170,11 @@ Machine<RealT>::train(const std::vector<RealT>& _in, const std::vector<RealT>& _
   std::copy(_out.begin(), _out.end(), y_data.flat<RealT>().data());
 
   // training steps
-  for (int i = 0; i <= 50000; ++i) {
+  for (int i = 0; i <= 500000; ++i) {
     if (i % 100 == 0)
     {
       std::vector<tensorflow::Tensor> outputs;
-      TF_CHECK_OK(session_.Run({ { *x_, x_data }, { *y_, y_data } }, { loss_ }, &outputs));
+      TF_CHECK_OK(session_.Run({ { *x_, x_data }, { *y_, y_data } }, { real_loss_ }, &outputs));
       std::cout << "Loss after " << i << " steps " << outputs[0].scalar<RealT>() << std::endl;
     }
     // nullptr because the output from the run is useless

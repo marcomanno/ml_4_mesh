@@ -104,8 +104,8 @@ void compute()
 int main()
 {
   MeshSegmentation::train_mesh_segmentation("C:/Users/marco/Project/ml_4_mesh/src/Test/Data");
-  compute();
 #if 0
+  compute();
   //tensorflow::port::InitMain(nullptr, 0, nullptr);
 
   tensorflow::Scope scope = tensorflow::Scope::NewRootScope();

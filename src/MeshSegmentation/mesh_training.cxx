@@ -19,7 +19,7 @@ namespace fs = std::filesystem;
 
 namespace
 {
-static const size_t INPUT_SIZE = 8; // 1016;
+static const size_t INPUT_SIZE = 56; //  1016;
 
 static std::string convert(const fs::path& _path)
 {
@@ -90,6 +90,7 @@ struct MachineData
     _new_faces.emplace_back();
     input_var_.insert(input_var_.end(), 4, 0.);
   };
+
 
   bool add_element(const FaceInfo& _fi)
   {
@@ -199,7 +200,6 @@ static void process(const fs::path& _mesh_file, TrainData& _tr_dat)
       if (f == ef.get(1))
         std::swap(n0, n1);
       auto ang1 = Geo::signed_angle(n0, n1, curr_dir);
-      if (ang1 < 0) ang1 += 2 * M_PI;
       coe_dat.edge_angle_ = ang1;
     }
   }
@@ -244,6 +244,11 @@ void train_mesh_segmentation(const char* _folder)
   machine->set_targets(layer0);
   TrainData tr_dat;
   train_mesh_segmentation_on_folder(fs::path(_folder), tr_dat);
+  for (int i = 0; i < tr_dat.out_.size(); ++i)
+  {
+    if ((tr_dat.out_[i] > 0) ^ (fabs(tr_dat.in_[INPUT_SIZE * i]) > 0.1))
+      std::cout << "Error";
+  }
   machine->train(tr_dat.in_, tr_dat.out_);
 }
 } // namespace MeshSegmentation
