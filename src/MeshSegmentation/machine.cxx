@@ -144,7 +144,7 @@ Machine<RealT>::set_targets(tensorflow::Input& _layer)
     tensorflow::ops::Mul(scope_, reg_coeff, regularization));
 
   // add the gradients operations to the graph
-  tensorflow::ops::Cast grad_coeff = tensorflow::ops::Cast(scope_, 0.001, TfType);
+  tensorflow::ops::Cast grad_coeff = tensorflow::ops::Cast(scope_, 0.0009, TfType);
   std::vector<tensorflow::Output> grad_outputs;
   tensorflow::AddSymbolicGradients(scope_, { loss_ }, weights_, &grad_outputs);
   for (int i = 0; i < std::size(weights_); ++i)
