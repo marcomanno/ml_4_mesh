@@ -1,4 +1,4 @@
-#pragma optimize ("", off)
+//#pragma optimize ("", off)
 #include "Import/load_obj.hh"
 #include "Topology/iterator.hh"
 
@@ -19,7 +19,9 @@ namespace fs = std::filesystem;
 
 namespace
 {
-static const size_t INPUT_SIZE = 56; //  1016;
+static const size_t INPUT_SIZE = 
+//56;
+1016;
 
 static std::string convert(const fs::path& _path)
 {

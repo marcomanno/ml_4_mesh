@@ -1,4 +1,4 @@
-#pragma optimize ("", off)
+//#pragma optimize ("", off)
 #include "machine.hxx"
 
 #include "tensorflow/core/framework/types.h"
@@ -93,9 +93,11 @@ template <class RealT> tensorflow::Input
 Machine<RealT>::add_weight(int _m, int _n)
 {
   auto w = tensorflow::ops::Variable(scope_, { _m, _n }, TfType);
+  auto cc = tensorflow::ops::RandomNormal(scope_, { _m, _n }, TfType);
   auto assign = tensorflow::ops::Assign(
     scope_, w,
-    tensorflow::ops::RandomNormal(scope_, { _m, _n }, TfType));
+    tensorflow::ops::ZerosLike(scope_, cc));
+    //tensorflow::ops::RandomNormal(scope_, { _m, _n }, TfType));
   TF_CHECK_OK(session_.Run({assign}, nullptr));
   weights_.push_back(w);
   return w;
@@ -135,14 +137,14 @@ Machine<RealT>::set_targets(tensorflow::Input& _layer)
       tensorflow::ops::Sub(scope_, _layer, *y_)),
     { 0, 1 });
 #endif
-  tensorflow::ops::Cast reg_coeff = tensorflow::ops::Cast(scope_, 0.01, TfType);
+  tensorflow::ops::Cast reg_coeff = tensorflow::ops::Cast(scope_, 0.000001, TfType);
   loss_ = tensorflow::ops::Add(
     scope_,
     real_loss_,
     tensorflow::ops::Mul(scope_, reg_coeff, regularization));
 
   // add the gradients operations to the graph
-  tensorflow::ops::Cast grad_coeff = tensorflow::ops::Cast(scope_, 0.01, TfType);
+  tensorflow::ops::Cast grad_coeff = tensorflow::ops::Cast(scope_, 0.001, TfType);
   std::vector<tensorflow::Output> grad_outputs;
   tensorflow::AddSymbolicGradients(scope_, { loss_ }, weights_, &grad_outputs);
   for (int i = 0; i < std::size(weights_); ++i)
@@ -170,7 +172,7 @@ Machine<RealT>::train(const std::vector<RealT>& _in, const std::vector<RealT>& _
   std::copy(_out.begin(), _out.end(), y_data.flat<RealT>().data());
 
   // training steps
-  for (int i = 0; i <= 500000; ++i) {
+  for (int i = 0; i <= 50000; ++i) {
     if (i % 100 == 0)
     {
       std::vector<tensorflow::Tensor> outputs;
