@@ -16,6 +16,9 @@
 #include "tensorflow/cc/ops/training_ops.h"
 #include "tensorflow/cc/client/client_session.h"
 #include "tensorflow/cc/ops/standard_ops.h"
+#include "tensorflow/core/common_runtime/direct_session.h"
+#include "tensorflow/cc/framework/scope_internal.h"
+#include "tensorflow/core/graph/graph_constructor.h"
 
 namespace ML
 {
@@ -172,7 +175,7 @@ Machine<RealT>::train(const std::vector<RealT>& _in, const std::vector<RealT>& _
   std::copy(_out.begin(), _out.end(), y_data.flat<RealT>().data());
 
   // training steps
-  for (int i = 0; i <= 50000; ++i) {
+  for (int i = 0; i <= 500; ++i) {
     if (i % 100 == 0)
     {
       std::vector<tensorflow::Tensor> outputs;
@@ -217,12 +220,23 @@ void Machine<RealT>::save(const char* _flnm)
 template <class RealT>
 void Machine<RealT>::load(const char* _flnm)
 {
+  tensorflow::GraphDef graph_def;
+  tensorflow::ReadBinaryProto(tensorflow::Env::Default(), _flnm, &graph_def);
+  tensorflow::ImportGraphDef(tensorflow::ImportGraphDefOptions(),
+                             graph_def,
+                             scope_.graph(),
+                             nullptr);
+  for (tensorflow::Node* node : scope_.graph()->nodes())
+  {
+    std::cout << node->name() << " ";
+  }
+
 #if 0
   // restore
   tensorflow::Tensor checkpointPathTensor(tensorflow::DT_STRING, tensorflow::TensorShape());
-  checkpointPathTensor.scalar<std::string>()() = "some/path";
+  checkpointPathTensor.scalar<std::string>()() = _flnm;
   tensor_dict feed_dict = { { graph_def.saver_def().filename_tensor_name(), checkpointPathTensor } };
-  status = sess->Run(feed_dict, {}, { graph_def.saver_def().restore_op_name() }, nullptr);
+  session_->Run(feed_dict, {}, { graph_def.saver_def().restore_op_name() }, nullptr);
 #endif
 }
 

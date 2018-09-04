@@ -252,5 +252,9 @@ void train_mesh_segmentation(const char* _folder)
       std::cout << "Error";
   }
   machine->train(tr_dat.in_, tr_dat.out_);
+  const char* flnm = "C:/Users/marco/Project/ml_4_mesh/out/mesh_seg.pb";
+  machine->save(flnm);
+  auto machine2 = ML::IMachine<double>::make();
+  machine2->load(flnm);
 }
 } // namespace MeshSegmentation
