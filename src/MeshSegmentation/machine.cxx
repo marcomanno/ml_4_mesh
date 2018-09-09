@@ -22,6 +22,8 @@
 
 namespace ML
 {
+const std::string machine_attr("MLMachine");
+
 template <class RealT>
 struct Machine : public IMachine<RealT>
 {
@@ -44,7 +46,8 @@ private:
   tensorflow::Scope scope_ = tensorflow::Scope::NewRootScope();
   tensorflow::ClientSession session_;
 
-  std::shared_ptr<tensorflow::ops::Placeholder> x_, y_;
+  std::shared_ptr<tensorflow::ops::Placeholder> y_;
+  tensorflow::Output x_;
   tensorflow::int64 x_size_ = 0, y_size_ = 0;
 
   tensorflow::OutputList weights_;
@@ -67,11 +70,13 @@ template struct IMachine<double>;
 template struct IMachine<float>;
 
 
-template <class RealT> tensorflow::Input 
+template <class RealT> tensorflow::Input
 Machine<RealT>::make_input(int _rows)
 {
-  add_place_holder(x_size_ = _rows, x_);
-  return *x_;
+  std::shared_ptr<tensorflow::ops::Placeholder> x;
+  add_place_holder(x_size_ = _rows, x);
+  x_ = *x;
+  return x_;
 }
 
 template <class RealT> tensorflow::Input 
@@ -179,11 +184,11 @@ Machine<RealT>::train(const std::vector<RealT>& _in, const std::vector<RealT>& _
     if (i % 100 == 0)
     {
       std::vector<tensorflow::Tensor> outputs;
-      TF_CHECK_OK(session_.Run({ { *x_, x_data }, { *y_, y_data } }, { real_loss_ }, &outputs));
+      TF_CHECK_OK(session_.Run({ { x_, x_data }, { *y_, y_data } }, { real_loss_ }, &outputs));
       std::cout << "Loss after " << i << " steps " << outputs[0].scalar<RealT>() << std::endl;
     }
     // nullptr because the output from the run is useless
-    TF_CHECK_OK(session_.Run({ { *x_, x_data }, { *y_, y_data } }, apply_grad_, nullptr));
+    TF_CHECK_OK(session_.Run({ { x_, x_data }, { *y_, y_data } }, apply_grad_, nullptr));
   }
 }
 
@@ -193,7 +198,7 @@ Machine<RealT>::predict(const std::vector<RealT>& _in, std::vector<RealT>& _out)
   tensorflow::Tensor x_0(tensorflow::DataTypeToEnum<RealT>::v(), tensorflow::TensorShape{ 1, x_size() });
   std::copy(_in.begin(), _in.end(), x_0.flat<RealT>().data());
   std::vector<tensorflow::Tensor> outputs;
-  TF_CHECK_OK(session_.Run({ { *x_, x_0 } }, { out_layer_ }, &outputs));
+  TF_CHECK_OK(session_.Run({ { x_, x_0 } }, { out_layer_ }, &outputs));
   _out.resize(y_size());
   std::copy_n(outputs[0].scalar<RealT>().data(), outputs[0].dim_size(0), _out.begin());
 }
@@ -228,9 +233,11 @@ void Machine<RealT>::load(const char* _flnm)
                              nullptr);
   for (tensorflow::Node* node : scope_.graph()->nodes())
   {
-    std::cout << node->name() << " ";
+    if (node->name() == "Placeholder")
+      x_ = ::tensorflow::Output(node);
+    else if (node->name().compare("Tanh") == 0)
+      out_layer_ = ::tensorflow::Output(node);
   }
-
 #if 0
   // restore
   tensorflow::Tensor checkpointPathTensor(tensorflow::DT_STRING, tensorflow::TensorShape());
