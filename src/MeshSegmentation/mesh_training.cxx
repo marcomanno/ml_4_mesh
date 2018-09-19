@@ -253,8 +253,12 @@ void train_mesh_segmentation(const char* _folder)
   }
   machine->train(tr_dat.in_, tr_dat.out_);
   const char* flnm = "C:/Users/marco/Project/ml_4_mesh/out/mesh_seg.pb";
+  tr_dat.out_.resize(tr_dat.in_.size() / INPUT_SIZE);
+  machine->predictN(tr_dat.in_, tr_dat.out_);
   machine->save(flnm);
   auto machine2 = ML::IMachine<double>::make();
   machine2->load(flnm);
+  tr_dat.in_.resize(INPUT_SIZE);
+  machine2->predict1(tr_dat.in_, tr_dat.out_);
 }
 } // namespace MeshSegmentation

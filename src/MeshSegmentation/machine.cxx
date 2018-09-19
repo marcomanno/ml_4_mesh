@@ -1,6 +1,5 @@
-//#pragma optimize ("", off)
+#pragma optimize ("", off)
 #include "machine.hxx"
-
 #include "tensorflow/core/framework/types.h"
 #include "tensorflow/core/platform/init_main.h"
 #include "tensorflow/core/public/session.h"
@@ -28,23 +27,30 @@ template <class RealT>
 struct Machine : public IMachine<RealT>
 {
   const tensorflow::DataType TfType = tensorflow::DataTypeToEnum<RealT>::value;
-  Machine() : session_(scope_){}
+  Machine() : client_session_(scope_){}
   tensorflow::Input make_input(int _rows) override;
   tensorflow::Input make_output(int _rows) override;
   tensorflow::Input add_weight(int _m, int _n) override;
-  tensorflow::Input add_layer(
+  tensorflow::Output add_layer(
     tensorflow::Input& _X,
     tensorflow::Input& _A,
     tensorflow::Input& _B) override;
-  tensorflow::Input set_targets(tensorflow::Input& _layer) override;
+  tensorflow::Input set_targets(tensorflow::Output& _layer) override;
   void train(const std::vector<RealT>& _in, const std::vector<RealT>& _out) override;
 
-  void predict(const std::vector<RealT>& _in, std::vector<RealT> &_out) override;
+  void predictN(const std::vector<RealT>& _in, std::vector<RealT> &_out) override
+  {
+    return predict(_in, _out, x_size_);
+  }
+  void predict1(const std::vector<RealT>& _in, std::vector<RealT> &_out) override
+  {
+    return predict(_in, _out, _in.size());
+  }
   void save(const char* _flnm) override;
   void load(const char* _flnm) override;
 private:
   tensorflow::Scope scope_ = tensorflow::Scope::NewRootScope();
-  tensorflow::ClientSession session_;
+  tensorflow::ClientSession client_session_;
 
   std::shared_ptr<tensorflow::ops::Placeholder> y_;
   tensorflow::Output x_;
@@ -53,11 +59,13 @@ private:
   tensorflow::OutputList weights_;
   tensorflow::Output loss_, real_loss_;
   std::vector<tensorflow::Output> apply_grad_;
-  tensorflow::Output out_layer_;
+  std::unique_ptr<tensorflow::Output> out_layer_;
 
   void add_place_holder(int _rows, std::shared_ptr<tensorflow::ops::Placeholder>& _obj);
   auto x_size() const { return x_size_; }
   auto y_size() const { return y_size_; }
+  void predict(const std::vector<RealT>& _in, std::vector<RealT> &_out, 
+               tensorflow::int64 _x_size);
 };
 
 template <typename RealT> std::shared_ptr<IMachine<RealT>>
@@ -106,12 +114,12 @@ Machine<RealT>::add_weight(int _m, int _n)
     scope_, w,
     tensorflow::ops::ZerosLike(scope_, cc));
     //tensorflow::ops::RandomNormal(scope_, { _m, _n }, TfType));
-  TF_CHECK_OK(session_.Run({assign}, nullptr));
+  TF_CHECK_OK(client_session_.Run({assign}, nullptr));
   weights_.push_back(w);
   return w;
 }
 
-template <class RealT> tensorflow::Input 
+template <class RealT> tensorflow::Output
 Machine<RealT>::add_layer(
   tensorflow::Input& _X,
   tensorflow::Input& _A,
@@ -124,7 +132,7 @@ Machine<RealT>::add_layer(
 }
 
 template <class RealT> tensorflow::Input 
-Machine<RealT>::set_targets(tensorflow::Input& _layer)
+Machine<RealT>::set_targets(tensorflow::Output& _layer)
 {
   // regularization
   tensorflow::OutputList l2_losses;
@@ -160,7 +168,7 @@ Machine<RealT>::set_targets(tensorflow::Input& _layer)
     apply_grad_.push_back(tensorflow::ops::ApplyGradientDescent(
       scope_, weights_[i], grad_coeff, { grad_outputs[i] }));
   }
-  out_layer_ =  tensorflow::Output(_layer.node());
+  out_layer_.reset(new tensorflow::Output(_layer.op(), _layer.index()));
   return loss_;
 }
 
@@ -184,23 +192,27 @@ Machine<RealT>::train(const std::vector<RealT>& _in, const std::vector<RealT>& _
     if (i % 100 == 0)
     {
       std::vector<tensorflow::Tensor> outputs;
-      TF_CHECK_OK(session_.Run({ { x_, x_data }, { *y_, y_data } }, { real_loss_ }, &outputs));
+      TF_CHECK_OK(client_session_.Run({ { x_, x_data }, { *y_, y_data } }, { real_loss_ }, &outputs));
       std::cout << "Loss after " << i << " steps " << outputs[0].scalar<RealT>() << std::endl;
     }
     // nullptr because the output from the run is useless
-    TF_CHECK_OK(session_.Run({ { x_, x_data }, { *y_, y_data } }, apply_grad_, nullptr));
+    TF_CHECK_OK(client_session_.Run({ { x_, x_data }, { *y_, y_data } }, apply_grad_, nullptr));
   }
 }
 
 template <class RealT> void 
-Machine<RealT>::predict(const std::vector<RealT>& _in, std::vector<RealT>& _out)
+Machine<RealT>::predict(
+  const std::vector<RealT>& _in, std::vector<RealT>& _out, tensorflow::int64 _x_size)
 {
-  tensorflow::Tensor x_0(tensorflow::DataTypeToEnum<RealT>::v(), tensorflow::TensorShape{ 1, x_size() });
+  auto res_nmbr = static_cast<tensorflow::int64>(_in.size()) / _x_size;
+  tensorflow::Tensor x_0(tensorflow::DataTypeToEnum<RealT>::v(), 
+                         tensorflow::TensorShape{ res_nmbr, _x_size });
   std::copy(_in.begin(), _in.end(), x_0.flat<RealT>().data());
   std::vector<tensorflow::Tensor> outputs;
-  TF_CHECK_OK(session_.Run({ { x_, x_0 } }, { out_layer_ }, &outputs));
-  _out.resize(y_size());
-  std::copy_n(outputs[0].scalar<RealT>().data(), outputs[0].dim_size(0), _out.begin());
+  TF_CHECK_OK(client_session_.Run({ { x_, x_0 } }, { *out_layer_ }, &outputs));
+  auto size = outputs[0].dims();
+  auto data = outputs[0].flat<RealT>().data();
+  std::copy_n(data, size, _out.begin());
 }
 
 template <class RealT>
@@ -236,7 +248,7 @@ void Machine<RealT>::load(const char* _flnm)
     if (node->name() == "Placeholder")
       x_ = ::tensorflow::Output(node);
     else if (node->name().compare("Tanh") == 0)
-      out_layer_ = ::tensorflow::Output(node);
+      out_layer_.reset(new tensorflow::Output(node));
   }
 #if 0
   // restore
