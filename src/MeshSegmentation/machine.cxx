@@ -1,23 +1,24 @@
 #pragma optimize ("", off)
 #include "machine.hxx"
-#include "tensorflow/core/framework/types.h"
-#include "tensorflow/core/platform/init_main.h"
-#include "tensorflow/core/public/session.h"
-#include "tensorflow/core/platform/env.h"
+#include "tensorflow/cc/client/client_session.h"
+#include "tensorflow/cc/framework/gradients.h"
+#include "tensorflow/cc/framework/ops.h"
 #include "tensorflow/cc/framework/scope.h"
+#include "tensorflow/cc/framework/scope_internal.h"
 #include "tensorflow/cc/ops/array_ops.h"
 #include "tensorflow/cc/ops/state_ops.h"
 #include "tensorflow/cc/ops/random_ops.h"
 #include "tensorflow/cc/ops/math_ops.h"
 #include "tensorflow/cc/ops/nn_ops.h"
-#include "tensorflow/core/kernels/matmul_op.h"
-#include "tensorflow/cc/framework/gradients.h"
 #include "tensorflow/cc/ops/training_ops.h"
-#include "tensorflow/cc/client/client_session.h"
 #include "tensorflow/cc/ops/standard_ops.h"
 #include "tensorflow/core/common_runtime/direct_session.h"
-#include "tensorflow/cc/framework/scope_internal.h"
+#include "tensorflow/core/framework/types.h"
 #include "tensorflow/core/graph/graph_constructor.h"
+#include "tensorflow/core/kernels/matmul_op.h"
+#include "tensorflow/core/platform/env.h"
+#include "tensorflow/core/platform/init_main.h"
+#include "tensorflow/core/public/session.h"
 
 namespace ML
 {
@@ -221,24 +222,31 @@ void Machine<RealT>::save(const char* _flnm)
   // save
   tensorflow::GraphDef graph_def;
   scope_.ToGraphDef(&graph_def);
+  std::string flnm(_flnm);
   tensorflow::WriteBinaryProto(tensorflow::Env::Default(),
-                               _flnm, graph_def);
+                               (flnm + ".pb").c_str(), graph_def);
 
-#if 0
-  tensorflow::Tensor checkpointPathTensor(tensorflow::DT_STRING, tensorflow::TensorShape());
-  checkpointPathTensor.scalar<std::string>()() = _flnm;
-  //tensor_dict feed_dict = { { graph_def.saver_def().filename_tensor_name(), checkpointPathTensor } };
-  auto status = session_.Run(
-    { { graph.saver_def().filename_tensor_name(), checkpointPathTensor } }, 
-    {}, { graph.saver_def().save_tensor_name() }, nullptr);
-#endif
+  for (tensorflow::Node* node : scope_.graph()->nodes())
+  {
+    if (node->type_string() != "VariableV2")
+      continue;
+    std::vector<tensorflow::Tensor> t(1);
+    client_session_.Run({ tensorflow::Output(node) }, &t);
+    tensorflow::TensorProto tensor_proto;
+    t[0].AsProtoTensorContent(&tensor_proto);
+    const char* flnm_var = 
+      (flnm + "_" + std::to_string(node->id()) + ".pb").c_str();
+    tensorflow::WriteTextProto(
+      tensorflow::Env::Default(), flnm_var,
+      tensor_proto);
+  }
 }
 
 template <class RealT>
 void Machine<RealT>::load(const char* _flnm)
 {
   tensorflow::GraphDef graph_def;
-  tensorflow::ReadBinaryProto(tensorflow::Env::Default(), _flnm, &graph_def);
+  tensorflow::ReadTextProto(tensorflow::Env::Default(), _flnm, &graph_def);
   tensorflow::ImportGraphDef(tensorflow::ImportGraphDefOptions(),
                              graph_def,
                              scope_.graph(),
@@ -249,6 +257,9 @@ void Machine<RealT>::load(const char* _flnm)
       x_ = ::tensorflow::Output(node);
     else if (node->name().compare("Tanh") == 0)
       out_layer_.reset(new tensorflow::Output(node));
+    else
+      std::cout << node->name() << " " << node->type_string() << 
+      " " << node->id() << "\n";
   }
 #if 0
   // restore
@@ -258,7 +269,6 @@ void Machine<RealT>::load(const char* _flnm)
   session_->Run(feed_dict, {}, { graph_def.saver_def().restore_op_name() }, nullptr);
 #endif
 }
-
 
 } // namespace ML 
 

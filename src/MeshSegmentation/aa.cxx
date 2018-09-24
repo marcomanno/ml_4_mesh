@@ -88,15 +88,15 @@ void compute()
   auto w2 = machine->add_weight(2, 1);
   auto b2 = machine->add_weight(1, 1);
   auto layer0 = machine->add_layer(x, w0, b0);
-  auto layer1 = machine->add_layer(layer0, w1, b1);
-  auto layer2 = machine->add_layer(layer1, w2, b2);
+  auto layer1 = machine->add_layer(tensorflow::Input(layer0), w1, b1);
+  auto layer2 = machine->add_layer(tensorflow::Input(layer1), w2, b2);
   machine->set_targets(layer2);
 
   std::vector<RealType> xx, yy;
   load_data(xx, yy);
   machine->train(xx, yy);
   std::vector<RealType> x1 = {1.25, -1, 7}, y1;
-  machine->predict(x1, y1);
+  machine->predictN(x1, y1);
 
   std::cout << x1[0] << " " << x1[1] << " " << x1[2] << " ---> " << y1[0];
 }
