@@ -1,3 +1,4 @@
+#if 0
 #include "graph.hh"
 
 #include <array>
@@ -148,5 +149,5 @@ void GraphBase::compute()
   impl_->compute();
 }
 
-
 } // namespace
+#endif
