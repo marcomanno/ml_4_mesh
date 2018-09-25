@@ -2,7 +2,7 @@
 include_directories (
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/..
-  C:/Users/marco/OneDrive/Documents/PROJECTS/ThirdParties/eigen-eigen-5a0156e40feb
+  ${PROJECT_SOURCE_DIR}/tensorflow/include
   C:/Users/marco/OneDrive/Documents/PROJECTS/ThirdParties/boost_1_66_0
 )
 
