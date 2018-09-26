@@ -252,7 +252,7 @@ void train_mesh_segmentation(const char* _folder)
       std::cout << "Error";
   }
   machine->train(tr_dat.in_, tr_dat.out_);
-  const char* flnm = "C:/Users/marco/Project/ml_4_mesh/out/mesh_seg";
+  const char* flnm = "C:/Users/USER/source/repos/ml_4_mesh/out/";
   tr_dat.out_.resize(tr_dat.in_.size() / INPUT_SIZE);
   machine->predictN(tr_dat.in_, tr_dat.out_);
   machine->save(flnm);

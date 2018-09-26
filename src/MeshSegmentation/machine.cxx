@@ -216,15 +216,22 @@ Machine<RealT>::predict(
   std::copy_n(data, size, _out.begin());
 }
 
+std::string make_fiLename(const char* _flnm, tensorflow::Node* _node = nullptr)
+{
+  if (_node)
+    return std::string(_flnm) + "_" + std::to_string(_node->id()) + ".pb";
+  else
+    return std::string(_flnm) + "_graph" + ".pb";
+}
+
 template <class RealT>
 void Machine<RealT>::save(const char* _flnm)
 {
   // save
   tensorflow::GraphDef graph_def;
   scope_.ToGraphDef(&graph_def);
-  std::string flnm(_flnm);
   tensorflow::WriteBinaryProto(tensorflow::Env::Default(),
-                               (flnm + ".pb").c_str(), graph_def);
+    make_fiLename(_flnm).c_str(), graph_def);
 
   for (tensorflow::Node* node : scope_.graph()->nodes())
   {
@@ -234,10 +241,8 @@ void Machine<RealT>::save(const char* _flnm)
     client_session_.Run({ tensorflow::Output(node) }, &t);
     tensorflow::TensorProto tensor_proto;
     t[0].AsProtoTensorContent(&tensor_proto);
-    const char* flnm_var = 
-      (flnm + "_" + std::to_string(node->id()) + ".pb").c_str();
     tensorflow::WriteTextProto(
-      tensorflow::Env::Default(), flnm_var,
+      tensorflow::Env::Default(), make_fiLename(_flnm, node).c_str(),
       tensor_proto);
   }
 }
@@ -246,7 +251,8 @@ template <class RealT>
 void Machine<RealT>::load(const char* _flnm)
 {
   tensorflow::GraphDef graph_def;
-  tensorflow::ReadTextProto(tensorflow::Env::Default(), _flnm, &graph_def);
+  tensorflow::ReadTextProto(tensorflow::Env::Default(), 
+    make_fiLename(_flnm).c_str(), &graph_def);
   tensorflow::ImportGraphDef(tensorflow::ImportGraphDefOptions(),
                              graph_def,
                              scope_.graph(),
@@ -257,9 +263,21 @@ void Machine<RealT>::load(const char* _flnm)
       x_ = ::tensorflow::Output(node);
     else if (node->name().compare("Tanh") == 0)
       out_layer_.reset(new tensorflow::Output(node));
-    else
-      std::cout << node->name() << " " << node->type_string() << 
-      " " << node->id() << "\n";
+    else if (node->type_string() == "VariableV2")
+    {
+
+      tensorflow::TensorProto tensor_proto;
+      tensorflow::ReadTextProto(
+        tensorflow::Env::Default(), make_fiLename(_flnm, node).c_str(),
+        &tensor_proto);
+      tensorflow::Tensor new_tensor;
+      if (!new_tensor.FromProto(tensor_proto))
+        std::cout << "Error init_var.FromProto(tensor_proto)/n";
+      auto var = ::tensorflow::Input(::tensorflow::Output(node));
+      tensorflow::ops::Assign assign(scope_, var, new_tensor);
+      //tensorflow::ops::RandomNormal(scope_, { _m, _n }, TfType));
+      TF_CHECK_OK(client_session_.Run({ assign }, nullptr));
+	  }
   }
 #if 0
   // restore
