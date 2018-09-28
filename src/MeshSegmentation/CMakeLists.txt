@@ -28,5 +28,7 @@ add_custom_command(
                 $<TARGET_FILE_DIR:MeshSegmentation>/tensorflow.dll)
 
 add_definitions(-DOUTDIR="${CMAKE_SOURCE_DIR}/../out")
+add_definitions(-DINDIR="${CMAKE_SOURCE_DIR}/Test/Data")
+add_definitions(-DPROTOBUF_USE_DLLS)
 
 # TODO: Add tests and install targets if needed.

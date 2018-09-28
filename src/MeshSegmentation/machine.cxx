@@ -230,7 +230,7 @@ void Machine<RealT>::save(const char* _flnm)
   // save
   tensorflow::GraphDef graph_def;
   scope_.ToGraphDef(&graph_def);
-  tensorflow::WriteBinaryProto(tensorflow::Env::Default(),
+  tensorflow::WriteTextProto(tensorflow::Env::Default(),
     make_fiLename(_flnm).c_str(), graph_def);
 
   for (tensorflow::Node* node : scope_.graph()->nodes())
@@ -253,19 +253,31 @@ void Machine<RealT>::load(const char* _flnm)
   tensorflow::GraphDef graph_def;
   tensorflow::ReadTextProto(tensorflow::Env::Default(), 
     make_fiLename(_flnm).c_str(), &graph_def);
-  tensorflow::ImportGraphDef(tensorflow::ImportGraphDefOptions(),
-                             graph_def,
-                             scope_.graph(),
-                             nullptr);
-  for (tensorflow::Node* node : scope_.graph()->nodes())
+
+  tensorflow::Graph graph(tensorflow::OpRegistry::Global());
+  tensorflow::ConvertGraphDefToGraph(
+    tensorflow::GraphConstructorOptions(), graph_def, &graph);
+  for (tensorflow::Node* node : graph.nodes())
   {
+    const auto& dat = node->output_types();
+    std::cout << node->name() << " " << node->id() << "SIZE";
+    for (int i = 0; i < dat.size(); ++i) std::cout << " " << dat[i];
+    std::cout << std::endl;
+    const auto& attrs = node->attrs();
+    auto att_it = attrs.begin();
+    //for (auto att_it = attrs.begin(); att_it != attrs.end();)
+    {
+      std::cout << "    Attr ";
+      //std::cout << att.first.c_str();
+      std::cout << std::endl;
+    }
     if (node->name() == "Placeholder")
       x_ = ::tensorflow::Output(node);
     else if (node->name().compare("Tanh") == 0)
       out_layer_.reset(new tensorflow::Output(node));
     else if (node->type_string() == "VariableV2")
     {
-
+#if 0
       tensorflow::TensorProto tensor_proto;
       tensorflow::ReadTextProto(
         tensorflow::Env::Default(), make_fiLename(_flnm, node).c_str(),
@@ -277,6 +289,7 @@ void Machine<RealT>::load(const char* _flnm)
       tensorflow::ops::Assign assign(scope_, var, new_tensor);
       //tensorflow::ops::RandomNormal(scope_, { _m, _n }, TfType));
       TF_CHECK_OK(client_session_.Run({ assign }, nullptr));
+#endif
 	  }
   }
 #if 0

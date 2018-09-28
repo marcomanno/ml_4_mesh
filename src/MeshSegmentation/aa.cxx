@@ -103,7 +103,7 @@ void compute()
 
 int main()
 {
-  MeshSegmentation::train_mesh_segmentation("C:/Users/marco/Project/ml_4_mesh/src/Test/Data");
+  MeshSegmentation::train_mesh_segmentation(INDIR);
 #if 0
   compute();
   //tensorflow::port::InitMain(nullptr, 0, nullptr);
