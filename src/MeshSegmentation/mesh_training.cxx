@@ -260,5 +260,6 @@ void train_mesh_segmentation(const char* _folder)
   machine2->load(flnm);
   tr_dat.in_.resize(INPUT_SIZE);
   machine2->predict1(tr_dat.in_, tr_dat.out_);
+  std::cout << "Prediction is " << tr_dat.out_[0] << std::endl;
 }
 } // namespace MeshSegmentation
