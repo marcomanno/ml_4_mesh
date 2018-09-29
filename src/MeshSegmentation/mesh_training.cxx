@@ -243,7 +243,7 @@ void train_mesh_segmentation(const char* _folder)
   auto w0 = machine->add_weight(INPUT_SIZE, 1);
   auto b0 = machine->add_weight(1, 1);
   auto layer0 = machine->add_layer(x, w0, b0);
-  machine->set_targets(layer0);
+  machine->set_target(layer0);
   TrainData tr_dat;
   train_mesh_segmentation_on_folder(fs::path(_folder), tr_dat);
   for (int i = 0; i < tr_dat.out_.size(); ++i)

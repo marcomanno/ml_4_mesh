@@ -30,7 +30,7 @@ struct IMachine
     tensorflow::Input& _X,
     tensorflow::Input& _A,
     tensorflow::Input& _B) = 0;
-  virtual tensorflow::Input set_targets(tensorflow::Output& _layer) = 0;
+  virtual tensorflow::Input set_target(tensorflow::Output& _layer) = 0;
   virtual void train(const std::vector<RealT>& _in,
                      const std::vector<RealT>& _out) = 0;
   virtual void predict1(const std::vector<RealT>& _in, std::vector<RealT> &_out) = 0;

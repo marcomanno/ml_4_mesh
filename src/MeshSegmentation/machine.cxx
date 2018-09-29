@@ -30,7 +30,7 @@ template <class RealT>
 struct Machine : public IMachine<RealT>
 {
   const tensorflow::DataType TfType = tensorflow::DataTypeToEnum<RealT>::value;
-  Machine() : client_session_(scope_){}
+  Machine() : IMachine<RealT>(), client_session_(scope_){}
   tensorflow::Input make_input(int _rows) override;
   tensorflow::Input make_output(int _rows) override;
   tensorflow::Input add_weight(int _m, int _n) override;
@@ -38,7 +38,7 @@ struct Machine : public IMachine<RealT>
     tensorflow::Input& _X,
     tensorflow::Input& _A,
     tensorflow::Input& _B) override;
-  tensorflow::Input set_targets(tensorflow::Output& _layer) override;
+  tensorflow::Input set_target(tensorflow::Output& _layer) override;
   void train(const std::vector<RealT>& _in, const std::vector<RealT>& _out) override;
 
   void predictN(const std::vector<RealT>& _in, std::vector<RealT> &_out) override
@@ -79,7 +79,9 @@ private:
 template <typename RealT> std::shared_ptr<IMachine<RealT>>
 IMachine<RealT>::make()
 {
-  return std::make_unique<Machine<RealT>>();
+  IMachine<RealT>* m = new Machine<RealT>;
+  std::shared_ptr<IMachine<RealT>> x(m);
+  return x;
 }
 
 template struct IMachine<double>;
@@ -142,7 +144,7 @@ Machine<RealT>::add_layer(
 }
 
 template <class RealT> tensorflow::Input 
-Machine<RealT>::set_targets(tensorflow::Output& _layer)
+Machine<RealT>::set_target(tensorflow::Output& _layer)
 {
   // regularization
   tensorflow::OutputList l2_losses;
@@ -225,10 +227,10 @@ Machine<RealT>::predict(
   std::copy_n(data, size, _out.begin());
 }
 
-std::string make_fiLename(const char* _flnm, tensorflow::Node* _node = nullptr)
+std::string make_fiLename(const char* _flnm, int _var_id = -1)
 {
-  if (_node)
-    return std::string(_flnm) + "_" + std::to_string(_node->id()) + ".pb";
+  if (_var_id >= 0)
+    return std::string(_flnm) + "_" + std::to_string(_var_id) + ".pb";
   else
     return std::string(_flnm) + "_graph" + ".pb";
 }
@@ -236,7 +238,6 @@ std::string make_fiLename(const char* _flnm, tensorflow::Node* _node = nullptr)
 template <class RealT>
 void Machine<RealT>::save(const char* _flnm)
 {
-  // save
   auto flnm = make_fiLename(_flnm);
   std::ofstream graph_stream(flnm);
   graph_stream << "P " << x_.node()->id() << " " << x_size_ << std::endl;
@@ -245,26 +246,13 @@ void Machine<RealT>::save(const char* _flnm)
     const auto& w = weights_[i];
     const auto& ws = weights_size_[i];
     graph_stream << "W " << w.node()->id() << " " << ws[0] << " " << ws[1] << std::endl;
-  }
 
-  for (size_t i = 0; i < layers_.size(); ++i)
-  {
-    graph_stream << "L ";
-    for (auto& l : layers_[i])
-      graph_stream << " " << l;
-    graph_stream << std::endl;
-  }
-
-  for (tensorflow::Node* node : scope_.graph()->nodes())
-  {
-    if (node->type_string() != "VariableV2")
-      continue;
     std::vector<tensorflow::Tensor> t(1);
-    client_session_.Run({ tensorflow::Output(node) }, &t);
+    client_session_.Run({ w }, &t);
     tensorflow::TensorProto tensor_proto;
     t[0].AsProtoTensorContent(&tensor_proto);
     tensorflow::WriteTextProto(
-      tensorflow::Env::Default(), make_fiLename(_flnm, node).c_str(),
+      tensorflow::Env::Default(), make_fiLename(_flnm, w.node()->id()).c_str(),
       tensor_proto);
   }
 }
@@ -272,47 +260,59 @@ void Machine<RealT>::save(const char* _flnm)
 template <class RealT>
 void Machine<RealT>::load(const char* _flnm)
 {
-  tensorflow::GraphDef graph_def;
-  tensorflow::ReadTextProto(tensorflow::Env::Default(), 
-    make_fiLename(_flnm).c_str(), &graph_def);
-
-  tensorflow::Graph graph(tensorflow::OpRegistry::Global());
-  tensorflow::ConvertGraphDefToGraph(
-    tensorflow::GraphConstructorOptions(), graph_def, &graph);
-  for (tensorflow::Node* node : graph.nodes())
+  auto flnm = make_fiLename(_flnm);
+  std::ifstream graph_stream(flnm);
+  std::string line;
+  std::map<int, tensorflow::Node*> map;
+  while (std::getline(graph_stream, line))
   {
-    const auto& dat = node->output_types();
-    std::cout << node->name() << " " << node->id() << "SIZE";
-    for (int i = 0; i < dat.size(); ++i) std::cout << " " << dat[i];
-    std::cout << std::endl;
-    const auto& attrs = node->attrs();
-    auto att_it = attrs.begin();
-    //for (auto att_it = attrs.begin(); att_it != attrs.end();)
+    int id, m, n;
+    std::istringstream str_stream(line);
+    char opt;
+    str_stream >> opt;
+    switch (opt) 
     {
-      std::cout << "    Attr ";
-      //std::cout << att.first.c_str();
-      std::cout << std::endl;
+      case 'P':
+      {
+        str_stream >> id >> m;
+        auto inp = make_input(m);
+        map.emplace(id, make_input(m).node());
+      }
+      break;
+      case 'W':
+      {
+        str_stream >> id >> m >> n;
+        auto node = add_weight(m, n).node();
+        map.emplace(id, node);
+
+        tensorflow::TensorProto tensor_proto;
+        tensorflow::ReadTextProto(
+          tensorflow::Env::Default(), make_fiLename(_flnm, id).c_str(),
+          &tensor_proto);
+        tensorflow::Tensor new_tensor;
+        if (!new_tensor.FromProto(tensor_proto))
+          std::cout << "Error init_var.FromProto(tensor_proto)/n";
+        auto var = ::tensorflow::Input(::tensorflow::Output(node));
+        tensorflow::ops::Assign assign(scope_, var, new_tensor);
+        TF_CHECK_OK(client_session_.Run({ assign }, nullptr));
+      }
+      break;
+      case 'L':
+      case 'O':
+      {
+        int A_id, X_id, B_id;
+        str_stream >> id >> A_id >> X_id >> B_id;
+        tensorflow::Output new_layer = 
+          add_layer(
+            tensorflow::Input(tensorflow::Output(map[A_id])), 
+            tensorflow::Input(tensorflow::Output(map[X_id])),
+            tensorflow::Input(tensorflow::Output(map[B_id])));
+        map.emplace(id, new_layer.node());
+        if (opt == 'O')
+          set_target(new_layer);
+        break;
+      }
     }
-    if (node->name() == "Placeholder")
-      x_ = ::tensorflow::Output(node);
-    else if (node->name().compare("Tanh") == 0)
-      out_layer_.reset(new tensorflow::Output(node));
-    else if (node->type_string() == "VariableV2")
-    {
-#if 0
-      tensorflow::TensorProto tensor_proto;
-      tensorflow::ReadTextProto(
-        tensorflow::Env::Default(), make_fiLename(_flnm, node).c_str(),
-        &tensor_proto);
-      tensorflow::Tensor new_tensor;
-      if (!new_tensor.FromProto(tensor_proto))
-        std::cout << "Error init_var.FromProto(tensor_proto)/n";
-      auto var = ::tensorflow::Input(::tensorflow::Output(node));
-      tensorflow::ops::Assign assign(scope_, var, new_tensor);
-      //tensorflow::ops::RandomNormal(scope_, { _m, _n }, TfType));
-      TF_CHECK_OK(client_session_.Run({ assign }, nullptr));
-#endif
-	  }
   }
 #if 0
   // restore

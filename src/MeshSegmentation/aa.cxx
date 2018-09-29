@@ -90,7 +90,7 @@ void compute()
   auto layer0 = machine->add_layer(x, w0, b0);
   auto layer1 = machine->add_layer(tensorflow::Input(layer0), w1, b1);
   auto layer2 = machine->add_layer(tensorflow::Input(layer1), w2, b2);
-  machine->set_targets(layer2);
+  machine->set_target(layer2);
 
   std::vector<RealType> xx, yy;
   load_data(xx, yy);
