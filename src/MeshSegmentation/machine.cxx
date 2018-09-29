@@ -20,6 +20,8 @@
 #include "tensorflow/core/platform/init_main.h"
 #include "tensorflow/core/public/session.h"
 
+#include <fstream>
+
 namespace ML
 {
 const std::string machine_attr("MLMachine");
@@ -57,10 +59,15 @@ private:
   tensorflow::Output x_;
   tensorflow::int64 x_size_ = 0, y_size_ = 0;
 
-  tensorflow::OutputList weights_;
+  std::vector<tensorflow::Output> weights_;
+  std::vector<std::array<int, 2>> weights_size_;
+
   tensorflow::Output loss_, real_loss_;
   std::vector<tensorflow::Output> apply_grad_;
   std::unique_ptr<tensorflow::Output> out_layer_;
+
+  // Op, A, X, B
+  std::vector<std::array<int, 4>> layers_;
 
   void add_place_holder(int _rows, std::shared_ptr<tensorflow::ops::Placeholder>& _obj);
   auto x_size() const { return x_size_; }
@@ -117,6 +124,7 @@ Machine<RealT>::add_weight(int _m, int _n)
     //tensorflow::ops::RandomNormal(scope_, { _m, _n }, TfType));
   TF_CHECK_OK(client_session_.Run({assign}, nullptr));
   weights_.push_back(w);
+  weights_size_.push_back({ _m, _n });
   return w;
 }
 
@@ -129,6 +137,7 @@ Machine<RealT>::add_layer(
   auto layer = tensorflow::ops::Tanh(
     scope_,
     tensorflow::ops::Add(scope_, tensorflow::ops::MatMul(scope_, _X, _A), _B));
+  layers_.push_back({ layer.node()->id(), _X.node()->id(), _A.node()->id(), _B.node()->id() });
   return layer;
 }
 
@@ -228,10 +237,23 @@ template <class RealT>
 void Machine<RealT>::save(const char* _flnm)
 {
   // save
-  tensorflow::GraphDef graph_def;
-  scope_.ToGraphDef(&graph_def);
-  tensorflow::WriteTextProto(tensorflow::Env::Default(),
-    make_fiLename(_flnm).c_str(), graph_def);
+  auto flnm = make_fiLename(_flnm);
+  std::ofstream graph_stream(flnm);
+  graph_stream << "P " << x_.node()->id() << " " << x_size_ << std::endl;
+  for (size_t i = 0; i < weights_.size(); ++i)
+  {
+    const auto& w = weights_[i];
+    const auto& ws = weights_size_[i];
+    graph_stream << "W " << w.node()->id() << " " << ws[0] << " " << ws[1] << std::endl;
+  }
+
+  for (size_t i = 0; i < layers_.size(); ++i)
+  {
+    graph_stream << "L ";
+    for (auto& l : layers_[i])
+      graph_stream << " " << l;
+    graph_stream << std::endl;
+  }
 
   for (tensorflow::Node* node : scope_.graph()->nodes())
   {
