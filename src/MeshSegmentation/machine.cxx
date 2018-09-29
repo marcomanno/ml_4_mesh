@@ -56,8 +56,9 @@ private:
   tensorflow::ClientSession client_session_;
 
   std::shared_ptr<tensorflow::ops::Placeholder> y_;
+  tensorflow::int64 y_size_ = 0;
   tensorflow::Output x_;
-  tensorflow::int64 x_size_ = 0, y_size_ = 0;
+  tensorflow::int64 x_size_ = 0;
 
   std::vector<tensorflow::Output> weights_;
   std::vector<std::array<int, 2>> weights_size_;
@@ -240,7 +241,8 @@ void Machine<RealT>::save(const char* _flnm)
 {
   auto flnm = make_fiLename(_flnm);
   std::ofstream graph_stream(flnm);
-  graph_stream << "P " << x_.node()->id() << " " << x_size_ << std::endl;
+  graph_stream << "X " << x_.node()->id() << " " << x_size_ << std::endl;
+  graph_stream << "Y " << y_->node()->id() << " " << y_size_ << std::endl;
   for (size_t i = 0; i < weights_.size(); ++i)
   {
     const auto& w = weights_[i];
@@ -254,6 +256,16 @@ void Machine<RealT>::save(const char* _flnm)
     tensorflow::WriteTextProto(
       tensorflow::Env::Default(), make_fiLename(_flnm, w.node()->id()).c_str(),
       tensor_proto);
+  }
+  for (auto& l : layers_)
+  {
+    if (l[0] == out_layer_->node()->id())
+      graph_stream << 'O';
+    else
+      graph_stream << 'L';
+    for (auto id_ref : l)
+      graph_stream << " " << id_ref;
+    graph_stream << std::endl;
   }
 }
 
@@ -272,11 +284,17 @@ void Machine<RealT>::load(const char* _flnm)
     str_stream >> opt;
     switch (opt) 
     {
-      case 'P':
+      case 'X':
       {
         str_stream >> id >> m;
         auto inp = make_input(m);
         map.emplace(id, make_input(m).node());
+      }
+      break;
+      case 'Y':
+      {
+        str_stream >> id >> m;
+        auto inp = make_output(m);
       }
       break;
       case 'W':
