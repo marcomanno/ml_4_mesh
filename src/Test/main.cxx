@@ -63,9 +63,9 @@ TEST_CASE("basic_00", "[RotationOptimization]")
   Eigen::Matrix2d R;
   Eigen::Vector2d T;
   find_optimal_rotation(ptmap, R, T);
+  REQUIRE((R(0, 0) == R(1, 1) && R(0, 1) == -R(1, 0)));
   REQUIRE(R(0, 0) == -1);
-  REQUIRE(R(1, 1) == -1);
-  REQUIRE((R(0, 1) == 0 && R(1, 0) == 0));
+  REQUIRE(R(0, 1) == 0);
   REQUIRE((T(0, 0) == 0 && T(1, 0) == 0));
 }
 
@@ -81,8 +81,26 @@ TEST_CASE("basic_01", "[RotationOptimization]")
   Eigen::Matrix2d R;
   Eigen::Vector2d T;
   find_optimal_rotation(ptmap, R, T);
+  REQUIRE((R(0, 0) == R(1, 1) && R(0, 1) == -R(1, 0)));
   REQUIRE(R(0, 0) == -1);
-  REQUIRE(R(1, 1) == -1);
-  REQUIRE((R(0, 1) == 0 && R(1, 0) == 0));
+  REQUIRE(R(1, 0) == 0);
   REQUIRE((T(0, 0) == 2. && T(1, 0) == 2.));
+}
+
+TEST_CASE("basic_02", "[RotationOptimization]")
+{
+  std::vector<std::array<Geo::VectorD2, 2>> ptmap =
+  {
+    {Geo::VectorD2{-1, -1}, Geo::VectorD2{-1,  1}},
+    {Geo::VectorD2{-1,  1}, Geo::VectorD2{ 1,  1}},
+    {Geo::VectorD2{ 1,  1}, Geo::VectorD2{ 1, -1}},
+    {Geo::VectorD2{ 1, -1}, Geo::VectorD2{-1, -1}}
+  };
+  Eigen::Matrix2d R;
+  Eigen::Vector2d T;
+  find_optimal_rotation(ptmap, R, T);
+  REQUIRE((R(0, 0) == R(1, 1) && R(0, 1) == -R(1, 0)));
+  REQUIRE(R(0, 0) == 0);
+  REQUIRE(R(0, 1) == 1);
+  REQUIRE((T(0, 0) == 0. && T(1, 0) == 0.));
 }
