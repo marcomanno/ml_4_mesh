@@ -2,9 +2,9 @@
 # project specific logic here.
 #
 
-set(name Test)
+set(project_name Test)
 
-project(${name})
+project(${project_name})
 
 include_directories (
   ${CMAKE_CURRENT_SOURCE_DIR}
@@ -14,23 +14,28 @@ file(GLOB HXX_FILES ${CMAKE_CURRENT_SOURCE_DIR} "*.hxx")
 file(GLOB CXX_FILES ${CMAKE_CURRENT_SOURCE_DIR} "*.cxx")
 
 # Add source to this project's executable.
-add_executable(${name} ${CXX_FILES} ${HXX_FILES})
-target_link_libraries(${name} 
+add_executable(${project_name} ${CXX_FILES} ${HXX_FILES})
+target_link_libraries(${project_name} 
   "${CMAKE_CURRENT_SOURCE_DIR}/../tensorflow/lib/tensorflow.lib"
   Import Topology Geo PolygonTriangularization)
-target_include_directories(${name} 
+target_include_directories(${project_name}
   PUBLIC ${CMAKE_SOURCE_DIR}/tensorflow/include
   PUBLIC ${CMAKE_SOURCE_DIR}/Catch2/single_include/Catch2)
   
-target_compile_definitions(${name} PRIVATE NOMINMAX EIGEN_DEFAULT_DENSE_INDEX_TYPE=std::int64_t)
+target_compile_definitions(${project_name} PRIVATE NOMINMAX EIGEN_DEFAULT_DENSE_INDEX_TYPE=std::int64_t)
 
 add_custom_command(
-        TARGET ${name} POST_BUILD
+        TARGET ${project_name} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy
                 ${CMAKE_SOURCE_DIR}/tensorflow/lib/tensorflow.dll
-                $<TARGET_FILE_DIR:${name}>/tensorflow.dll)
+                $<TARGET_FILE_DIR:${project_name}>/tensorflow.dll)
 
-target_compile_options(${name}  PRIVATE /W4 /w44265 /WX- )
+target_compile_options(${project_name}  PRIVATE /W4 /w44265 /WX- )
+
+target_link_libraries(${project_name}
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tensorflow/lib/tensorflow.lib"
+  Import Topology Geo PolygonTriangularization)
+
 
 add_definitions(-DOUTDIR="${CMAKE_SOURCE_DIR}/../out")
 add_definitions(-DINDIR="${CMAKE_SOURCE_DIR}/Test/Data")
