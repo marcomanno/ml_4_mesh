@@ -74,7 +74,8 @@ void flatten(Topo::Wrap<Topo::Type::BODY> _in_body)
   fixed(0, 0) = fixed(1, 0) = fixed(2, 0) = 0;
   fixed(3, 0) = -1;
   auto b = B * fixed;
-  Eigen::SparseQR <Matrix, Eigen::COLAMDOrdering<int>> solver;
+  //Eigen::SparseQR <Matrix, Eigen::COLAMDOrdering<int>> solver;
+  Eigen::LeastSquaresConjugateGradient<Matrix> solver;
   solver.compute(A);
   Eigen::VectorXd X = solver.solve(b);
   std::cout << X.rows() << " " << X.cols() << std::endl;
