@@ -20,7 +20,8 @@ target_link_libraries(${project_name}
   Import Topology Geo PolygonTriangularization)
 target_include_directories(${project_name}
   PUBLIC ${CMAKE_SOURCE_DIR}/tensorflow/include
-  PUBLIC ${CMAKE_SOURCE_DIR}/Catch2/single_include/Catch2)
+  PUBLIC ${CMAKE_SOURCE_DIR}/Catch2/single_include/Catch2
+  PUBLIC $ENV{MKL_ROOT_DIR}/include)
   
 target_compile_definitions(${project_name} PRIVATE NOMINMAX EIGEN_DEFAULT_DENSE_INDEX_TYPE=std::int64_t)
 
@@ -30,12 +31,15 @@ add_custom_command(
                 ${CMAKE_SOURCE_DIR}/tensorflow/lib/tensorflow.dll
                 $<TARGET_FILE_DIR:${project_name}>/tensorflow.dll)
 
-target_compile_options(${project_name}  PRIVATE /W4 /w44265 /WX- )
+target_compile_options(${project_name}  PRIVATE /W4 /w44265 /WX- /DMKL_ILP64)
 
 target_link_libraries(${project_name}
   "${CMAKE_CURRENT_SOURCE_DIR}/../tensorflow/lib/tensorflow.lib"
-  Import Topology Geo PolygonTriangularization)
-
+  Import Topology Geo PolygonTriangularization
+   $ENV{MKL_ROOT_DIR}/lib/intel64/mkl_intel_ilp64.lib
+   $ENV{MKL_ROOT_DIR}/lib/intel64/mkl_intel_thread.lib 
+   $ENV{MKL_ROOT_DIR}/lib/intel64/mkl_core.lib 
+   $ENV{MKL_ROOT_DIR}/../compiler/lib/intel64/libiomp5md.lib)
 
 add_definitions(-DOUTDIR="${CMAKE_SOURCE_DIR}/../out")
 add_definitions(-DINDIR="${CMAKE_SOURCE_DIR}/Test/Data")
