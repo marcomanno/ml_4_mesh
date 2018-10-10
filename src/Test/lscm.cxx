@@ -26,26 +26,81 @@ static auto move_to_local_coord(const Geo::VectorD3 _tri[3], Geo::VectorD2 _loc_
 
 using VertexIndMpap = std::map<Topo::Wrap<Topo::Type::VERTEX>, size_t>;
 
-struct OptimizeNonLinear
+struct OptimizeNonLinear : public IFunction
 {
   OptimizeNonLinear(const VertexIndMpap& _vrt_inds, Topo::Wrap<Topo::Type::BODY> _body):
-    vrt_inds_(_vrt_inds), body_(_body) { }
+    vrt_inds_(_vrt_inds), bf_(_body) { }
 
   void compute(Eigen::VectorXd& _X)
   {
-    Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE> bf(body_);
     auto q_solver = IQuadraticSolver::make();
-    q_solver->init(_X.size(), bf.size(), _X.data());
+    rows_ = 3 * bf_.size();
+    cols_ = _X.size();
+    q_solver->init(rows_, cols_, _X.data());
     q_solver->compute(*this);
   }
 
-  bool operator()(double* _x, double* _f, double* _fj)
+  bool operator()(const double* _x, double* _f, double* _fj) const override
   {
+    const size_t var_nmbr = vrt_inds_.size() * 2;
+    auto INDEX = [var_nmbr](size_t _i, size_t _j) { return _i * var_nmbr + _j; };
+    size_t i_eq = 0;
+    if (_fj != nullptr)
+      std::fill_n(_fj, rows_ * cols_, 0.);
+    for (auto face : bf_)
+    {
+      // 3 equations per face.
+      Topo::Iterator<Topo::Type::FACE, Topo::Type::VERTEX> fv(face);
+      size_t idx[3];
+      Geo::VectorD3 pts[3];
+      size_t i = 0;
+      for (auto v : fv)
+      {
+        v->geom(pts[i]);
+        idx[i++] = 2 * vrt_inds_.find(v)->second;
+      }
+      Geo::VectorD2 loc_tri[2];
+      auto area_time_2 = move_to_local_coord(pts, loc_tri);
+      auto u10 = _x[idx[1]] - _x[idx[0]];
+      auto u20 = _x[idx[2]] - _x[idx[0]];
+      auto v10 = _x[idx[1] + 1] - _x[idx[0] + 1];
+      auto v20 = _x[idx[2] + 1] - _x[idx[0] + 1];
+      double a = u10 / loc_tri[0][0];
+      double b = (u20 - loc_tri[1][0] * u20 / loc_tri[0][0]) / loc_tri[1][1];
+      double c = v10 / loc_tri[0][0];
+      double d = (v20 - loc_tri[1][0] * v20 / loc_tri[0][0]) / loc_tri[1][1];
+      _f[i_eq] = a + d;
+      _f[i_eq + 1] = b - c;
+      _f[i_eq + 2] = std::log(a * d - b * c);
+      if (_fj == nullptr)
+        continue;
+      auto det = a * d - b * c;
+      Eigen::Matrix<double, 3, 4> dfa;
+      dfa << 1,          0,        0,       1,
+             0,          1,       -1,       0,
+             d / det, -c / det, -b / det, a / det;
+
+      Eigen::Matrix<double, 4, 6> da_uv;
+      double coe0 = 1. / loc_tri[0][0];
+      double coe1 = (loc_tri[1][0] / loc_tri[0][0] - 1) / loc_tri[1][1];
+      da_uv << 
+        -coe0,     0, coe0,    0,     0,     0,
+         coe1,     0,    0,    0, -coe1,     0,
+            0, -coe0,    0, coe0,     0,     0,
+            0,  coe1,    0,    0,     0, -coe1;
+      Eigen::Matrix<double, 3, 6> df_uv = dfa * da_uv;
+      for (size_t i = 0; i < 3; ++i)
+      {
+        for (size_t j = 0; j < 6; ++j)
+          _fj[INDEX(i_eq + i, idx[j / 2] + j % 2)] = df_uv(i, j);
+      }
+    }
     return true;
   }
 
   const VertexIndMpap& vrt_inds_;
-  Topo::Wrap<Topo::Type::BODY> body_;
+  Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE> bf_;
+  size_t rows_, cols_;
 };
 
 // Function to minimize 
@@ -55,11 +110,11 @@ struct OptimizeNonLinear
 void flatten(Topo::Wrap<Topo::Type::BODY> _body)
 {
   std::map<Topo::Wrap<Topo::Type::VERTEX>, size_t> vrt_inds;
-  Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE> bf(_body);
   using Triplet = Eigen::Triplet<double, size_t>;
   using Matrix = Eigen::SparseMatrix<double>;
   std::vector<Triplet> coffs;
   size_t rows = 0, pt_nmbr = 0;
+  Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE> bf(_body);
   for (auto face : bf)
   {
     std::array<Geo::VectorD2, 3> w;
@@ -77,11 +132,11 @@ void flatten(Topo::Wrap<Topo::Type::BODY> _body)
         ++pt_nmbr;
       ++i;
     }
-    Geo::VectorD2 _loc_tri[2];
-    auto area_time_2_sqr = sqrt(move_to_local_coord(pts, _loc_tri));
-    w[0] = (_loc_tri[1] - _loc_tri[0]) / area_time_2_sqr;
-    w[1] =  -_loc_tri[1] / area_time_2_sqr;
-    w[2] = _loc_tri[0] / area_time_2_sqr;
+    Geo::VectorD2 loc_tri[2];
+    auto area_time_2_sqr = sqrt(move_to_local_coord(pts, loc_tri));
+    w[0] = (loc_tri[1] - loc_tri[0]) / area_time_2_sqr;
+    w[1] =  -loc_tri[1] / area_time_2_sqr;
+    w[2] = loc_tri[0] / area_time_2_sqr;
 
     for (size_t j = 0; j < 3; ++j)
     {

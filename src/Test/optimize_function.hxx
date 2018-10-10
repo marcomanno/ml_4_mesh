@@ -6,14 +6,19 @@
 #include <functional>
 #include <memory>
 
+struct IFunction
+{
+  virtual bool operator()(const double* _x, double* _f, double* _fj) const = 0;
+};
+
 class IQuadraticSolver
 {
 public:
   static std::unique_ptr<IQuadraticSolver> make();
   virtual ~IQuadraticSolver() {}
-  virtual bool init(size_t _cols, size_t _rows, double* _x) = 0;
+  virtual bool init(size_t _rows, size_t _cols, double* _x) = 0;
   virtual const double* get_x() = 0;
-  virtual bool compute(std::function<bool(double*, double*, double*)> _mat_functon) = 0;
+  virtual bool compute(const IFunction& _mat_functon) = 0;
   virtual bool get_result_info(size_t& _iter_nmbr, size_t& _stop_crit,
     double& residual_0, double& residual_1) = 0;
 };

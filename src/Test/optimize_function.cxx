@@ -58,7 +58,7 @@ public:
       MKL_Free_Buffers();
   }
 
-  bool init(size_t _cols, size_t _rows, double* _x) override
+  bool init(size_t _rows, size_t _cols, double* _x) override
   {
     var_nmbr_ = _cols;
     equat_nmbr_ = _rows;
@@ -89,7 +89,7 @@ public:
 
   const double* get_x()  override { return x_(); }
 
-  bool compute(std::function<bool(double*, double*, double*)> _mat_functon) override
+  bool compute(const IFunction& _mat_functon) override
   {
     MKL_INT RCI_Request = 0;
     MKL_INT successful = 0;
