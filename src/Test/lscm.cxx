@@ -44,12 +44,14 @@ struct OptimizeNonLinear : public IFunction
   {
     const size_t var_nmbr = vrt_inds_.size() * 2;
     auto INDEX = [var_nmbr](size_t _i, size_t _j) { return _i * var_nmbr + _j; };
-    size_t i_eq = 0;
+    size_t i_eq_loop = 0;
     if (_fj != nullptr)
       std::fill_n(_fj, rows_ * cols_, 0.);
     for (auto face : bf_)
     {
       // 3 equations per face.
+      size_t i_eq = i_eq_loop;
+      i_eq_loop += 3;
       Topo::Iterator<Topo::Type::FACE, Topo::Type::VERTEX> fv(face);
       size_t idx[3];
       Geo::VectorD3 pts[3];
@@ -164,7 +166,7 @@ void flatten(Topo::Wrap<Topo::Type::BODY> _body)
   solver.compute(A);
   Eigen::VectorXd X = solver.solve(b);
   std::cout << X.rows() << " " << X.cols() << std::endl;
-  X.resize(cols);
+  X.conservativeResize(cols);
   for (size_t i = 0; i < 4; ++i)
     X(split_idx + i, 0) = fixed(i, 0);
 
@@ -185,12 +187,19 @@ void flatten(Topo::Wrap<Topo::Type::BODY> _body)
 
 TEST_CASE("flat_00", "[Flattening]")
 {
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa0.obj");
+  flatten(body);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb0.obj", body);
+}
+
+TEST_CASE("flat_01", "[Flattening]")
+{
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa1.obj");
   flatten(body);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb1.obj", body);
 }
 
-TEST_CASE("flat_01", "[Flattening]")
+TEST_CASE("flat_02", "[Flattening]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa2.obj");
   flatten(body);

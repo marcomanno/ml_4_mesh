@@ -73,7 +73,7 @@ public:
 
     MKL_INT info[6];
     result_ = dtrnlsp_check(&handle_, &var_nmbr_, &equat_nmbr_, fjac_(), fvec_(), eps_, info);
-    if (result_)
+    if (result_ != TR_SUCCESS)
       return false;
 
     if (info[0] != 0 || // The handle is not valid.
@@ -93,6 +93,7 @@ public:
   {
     MKL_INT RCI_Request = 0;
     MKL_INT successful = 0;
+    _mat_functon(x_(), fvec_(), fjac_());
     /* rci cycle */
     while (successful == 0)
     {
