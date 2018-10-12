@@ -68,9 +68,9 @@ struct OptimizeNonLinear : public IFunction
       auto v10 = _x[idx[1] + 1] - _x[idx[0] + 1];
       auto v20 = _x[idx[2] + 1] - _x[idx[0] + 1];
       double a = u10 / loc_tri[0][0];
-      double b = (u20 - loc_tri[1][0] * u20 / loc_tri[0][0]) / loc_tri[1][1];
+      double b = (u20 - loc_tri[1][0] * u10 / loc_tri[0][0]) / loc_tri[1][1];
       double c = v10 / loc_tri[0][0];
-      double d = (v20 - loc_tri[1][0] * v20 / loc_tri[0][0]) / loc_tri[1][1];
+      double d = (v20 - loc_tri[1][0] * v10 / loc_tri[0][0]) / loc_tri[1][1];
       _f[i_eq] = a + d;
       _f[i_eq + 1] = b - c;
       _f[i_eq + 2] = std::log(a * d - b * c);
@@ -159,7 +159,7 @@ void flatten(Topo::Wrap<Topo::Type::BODY> _body)
   auto B = M.block(0, split_idx, rows, FIXED_VAR);
   Eigen::Vector4d fixed;
   fixed(0, 0) = fixed(1, 0) = fixed(2, 0) = 0;
-  fixed(3, 0) = -1;
+  fixed(3, 0) = -10;
   auto b = B * fixed;
   //Eigen::SparseQR <Matrix, Eigen::COLAMDOrdering<int>> solver;
   Eigen::LeastSquaresConjugateGradient<Matrix> solver;
@@ -168,10 +168,14 @@ void flatten(Topo::Wrap<Topo::Type::BODY> _body)
   std::cout << X.rows() << " " << X.cols() << std::endl;
   X.conservativeResize(cols);
   for (size_t i = 0; i < 4; ++i)
-    X(split_idx + i, 0) = fixed(i, 0);
+    X(split_idx + i, 0) = -fixed(i, 0);
 
-  OptimizeNonLinear onl(vrt_inds, _body);
-  onl.compute(X);
+  static bool non_linear_opt = true;
+  if (non_linear_opt)
+  {
+    OptimizeNonLinear onl(vrt_inds, _body);
+    onl.compute(X);
+  }
 
   for (const auto& v_id : vrt_inds)
   {

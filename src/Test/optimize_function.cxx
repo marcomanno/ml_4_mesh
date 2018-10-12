@@ -93,7 +93,6 @@ public:
   {
     MKL_INT RCI_Request = 0;
     MKL_INT successful = 0;
-    _mat_functon(x_(), fvec_(), fjac_());
     /* rci cycle */
     while (successful == 0)
     {
@@ -136,7 +135,7 @@ private:
   MKL_INT var_nmbr_;
   MKL_INT equat_nmbr_;
 
-  const double eps_[6] = { 0.00001,0.00001,0.00001,0.00001,0.00001,0.00001 }; /* set precisions for stop-criteria */
+  const double eps_[6] = { 0.0000001,0.0000001,0.0000001,0.0000001,0.000001,0.0000001 }; /* set precisions for stop-criteria */
   const MKL_INT iter1_ = 1000; // precisions for stop-criteria
   const MKL_INT iter2_ = 100;  // maximum number of iterations of calculation of trial-step
   const double rs_ = 0.0;      // initial step bound

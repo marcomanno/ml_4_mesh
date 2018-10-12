@@ -41,7 +41,7 @@ target_link_libraries(${project_name}
   "${CMAKE_CURRENT_SOURCE_DIR}/../tensorflow/lib/tensorflow.lib"
   Import Topology Geo PolygonTriangularization
    ${MKL_LIB_DIR}/mkl_intel_ilp64.lib
-   ${MKL_LIB_DIR}/mkl_intel_thread.lib 
+   ${MKL_LIB_DIR}/mkl_sequential.lib 
    ${MKL_LIB_DIR}/mkl_core.lib 
    ${MKL_LIB_DIR2}/libiomp5md.lib)
 
@@ -49,6 +49,7 @@ target_link_libraries(${project_name}
 add_definitions(-DOUTDIR="${CMAKE_SOURCE_DIR}/../out")
 add_definitions(-DINDIR="${CMAKE_SOURCE_DIR}/Test/Data")
 add_definitions(-DPROTOBUF_USE_DLLS)
+add_definitions(-DMKL_ILP64)
 
 # TODO: Add tests and install targets if needed.
 add_custom_command(TARGET ${project_name}
