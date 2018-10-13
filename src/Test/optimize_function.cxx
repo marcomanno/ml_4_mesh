@@ -1,4 +1,4 @@
-
+﻿
 #include "optimize_function.hxx"
 
 #include <stdio.h>
@@ -13,8 +13,9 @@
 
 namespace {
 
-struct mkl_array_wrap
+struct wrap_mkl_array
 {
+  ~wrap_mkl_array() { clean(); }
   bool init(MKL_INT _size)
   {
     resize(_size);
@@ -27,8 +28,7 @@ struct mkl_array_wrap
     std::copy_n(_data, _size, arr_);
     return arr_ != nullptr;
   }
-  ~mkl_array_wrap() { clean(); }
-  double* operator()() { return arr_; }
+  double* operator()() const { return arr_; }
 
 private:
   void clean()
@@ -39,12 +39,9 @@ private:
   void resize(MKL_INT _size)
   {
     clean();
-    if (arr_ != nullptr)
-      mkl_free(arr_);
     arr_ = (double *)mkl_malloc(sizeof(double) * _size, 64);
   }
   double* arr_ = nullptr;
-
 };
 
 class QuadraticSolver : public IQuadraticSolver
@@ -67,11 +64,19 @@ public:
       result_ = 1;
       return false;
     }
-    result_ = dtrnlsp_init(&handle_, &var_nmbr_, &equat_nmbr_, _x, eps_, &iter1_, &iter2_, &rs_);
+    eps_[0] = 0.0000001;    //  Δ < eps[0]
+    eps_[1] = 0.0000001;    // ||F(x)||2 < eps[1]
+    eps_[2] = 0.0000001;   // The Jacobian matrix is singular
+    eps_[3] = 0.0000001;   // || s || 2 < eps[3]
+    eps_[4] = 0.0000001;   // || F(x) || 2 - || F(x) - J(x)s || 2 < eps[4]
+    eps_[5] = 0.0000001; // The trial step precision.If eps[5] = 0, then the trial step 
+                         // meets the required precision(≤ 1.0 * 10 - 10)
+    std::fill_n(eps_, 6, 1.e-7);
+    result_ = dtrnlsp_init(&handle_, &var_nmbr_, &equat_nmbr_, x_(), eps_, &iter1_, &iter2_, &rs_);
     if (result_ != TR_SUCCESS)
       return false;
-
-    MKL_INT info[6];
+#if 0
+    MKL_INT info[6] = {};
     result_ = dtrnlsp_check(&handle_, &var_nmbr_, &equat_nmbr_, fjac_(), fvec_(), eps_, info);
     if (result_ != TR_SUCCESS)
       return false;
@@ -84,10 +89,9 @@ public:
       result_ = 1;
       return false;
     }
+#endif
     return true;
   }
-
-  const double* get_x()  override { return x_(); }
 
   bool compute(const IFunction& _mat_functon) override
   {
@@ -129,20 +133,28 @@ public:
     return  result_ == TR_SUCCESS;
   }
 
+  const double* get_x() const override
+  {
+    if (result_ == TR_SUCCESS)
+      return x_();
+    else
+      return nullptr;
+  }
+
 private:
   _TRNSP_HANDLE_t handle_;
 
   MKL_INT var_nmbr_;
   MKL_INT equat_nmbr_;
 
-  const double eps_[6] = { 0.0000001,0.0000001,0.0000001,0.0000001,0.000001,0.0000001 }; /* set precisions for stop-criteria */
   const MKL_INT iter1_ = 1000; // precisions for stop-criteria
   const MKL_INT iter2_ = 100;  // maximum number of iterations of calculation of trial-step
   const double rs_ = 0.0;      // initial step bound
+  double eps_[6]; /* set precisions for stop-criteria */
 
-  mkl_array_wrap x_;    // variable array
-  mkl_array_wrap fvec_; // function (f(x)) value vector
-  mkl_array_wrap fjac_; // jacobi matrix
+  wrap_mkl_array x_;    // variable array
+  wrap_mkl_array fvec_; // function (f(x)) value vector
+  wrap_mkl_array fjac_; // jacobi matrix
 
   MKL_INT result_;
 };

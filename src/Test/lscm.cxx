@@ -31,13 +31,15 @@ struct OptimizeNonLinear : public IFunction
   OptimizeNonLinear(const VertexIndMpap& _vrt_inds, Topo::Wrap<Topo::Type::BODY> _body):
     vrt_inds_(_vrt_inds), bf_(_body) { }
 
-  void compute(Eigen::VectorXd& _X)
+  const double* compute(Eigen::VectorXd& _X)
   {
-    auto q_solver = IQuadraticSolver::make();
+    if (!q_solver_)
+      q_solver_ = IQuadraticSolver::make();
     rows_ = 3 * bf_.size();
     cols_ = _X.size();
-    q_solver->init(rows_, cols_, _X.data());
-    q_solver->compute(*this);
+    q_solver_->init(rows_, cols_, _X.data());
+    q_solver_->compute(*this);
+    return q_solver_->get_x();
   }
 
   bool operator()(const double* _x, double* _f, double* _fj) const override
@@ -103,6 +105,7 @@ struct OptimizeNonLinear : public IFunction
   const VertexIndMpap& vrt_inds_;
   Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE> bf_;
   size_t rows_, cols_;
+  std::unique_ptr<IQuadraticSolver> q_solver_;
 };
 
 // Function to minimize 
@@ -170,23 +173,27 @@ void flatten(Topo::Wrap<Topo::Type::BODY> _body)
   for (size_t i = 0; i < 4; ++i)
     X(split_idx + i, 0) = -fixed(i, 0);
 
-  static bool non_linear_opt = true;
-  if (non_linear_opt)
+  auto set_x = [&](const double* _x)
+  {
+    for (const auto& v_id : vrt_inds)
+    {
+      auto base_ind = 2 * v_id.second;
+      Geo::VectorD3 pt;
+      pt = { _x[base_ind], _x[base_ind + 1], 0 };
+      const_cast<Topo::Wrap<Topo::Type::VERTEX>&>(v_id.first)->set_geom(pt);
+    }
+  };
+
+  static bool conformal = false;
+  if (conformal)
+    set_x(X.data());
+  else
   {
     OptimizeNonLinear onl(vrt_inds, _body);
-    onl.compute(X);
+    const double* x = onl.compute(X);
+    REQUIRE(x != nullptr);
+    set_x(x);
   }
-
-  for (const auto& v_id : vrt_inds)
-  {
-    auto base_ind = 2 * v_id.second;
-    Geo::VectorD3 pt;
-    pt = { X(base_ind, 0), X(base_ind + 1, 0), 0 };
-    const_cast<Topo::Wrap<Topo::Type::VERTEX>&>(v_id.first)->set_geom(pt);
-  }
-
-
-
 }
 
 TEST_CASE("flat_00", "[Flattening]")
