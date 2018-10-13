@@ -73,26 +73,28 @@ struct OptimizeNonLinear : public IFunction
       double b = (u20 - loc_tri[1][0] * u10 / loc_tri[0][0]) / loc_tri[1][1];
       double c = v10 / loc_tri[0][0];
       double d = (v20 - loc_tri[1][0] * v10 / loc_tri[0][0]) / loc_tri[1][1];
-      _f[i_eq] = a + d;
-      _f[i_eq + 1] = b - c;
-      _f[i_eq + 2] = std::log(a * d - b * c);
+      _f[i_eq] = a - d;
+      _f[i_eq + 1] = b + c;
+      auto det = a * d - b * c;
+      _f[i_eq + 2] = std::log(det);
       if (_fj == nullptr)
         continue;
-      auto det = a * d - b * c;
       Eigen::Matrix<double, 3, 4> dfa;
-      dfa << 1,          0,        0,       1,
-             0,          1,       -1,       0,
+      dfa <<       1,        0,        0,      -1,
+                   0,        1,        1,       0,
              d / det, -c / det, -b / det, a / det;
 
       Eigen::Matrix<double, 4, 6> da_uv;
-      double coe0 = 1. / loc_tri[0][0];
-      double coe1 = (loc_tri[1][0] / loc_tri[0][0] - 1) / loc_tri[1][1];
+      auto c0 = 1. / loc_tri[0][0]; // 1 / x_1
+      auto c1 = 1. / loc_tri[1][1]; // 1 / y_2
+      auto c2 = loc_tri[1][0] / (loc_tri[0][0] * loc_tri[1][1]); // x_2 / (x_1 * y_2)
       da_uv << 
-        -coe0,     0, coe0,    0,     0,     0,
-         coe1,     0,    0,    0, -coe1,     0,
-            0, -coe0,    0, coe0,     0,     0,
-            0,  coe1,    0,    0,     0, -coe1;
+           -c0,      0,   c0,    0,     0,  0,
+         c2-c1,      0,  -c2,    0,    c1,  0,
+             0,    -c0,    0,   c0,     0,  0,
+             0,  c2-c1,    0,  -c2,     0, c1;
       Eigen::Matrix<double, 3, 6> df_uv = dfa * da_uv;
+      std::cout << df_uv << std::endl << std::endl;
       for (size_t i = 0; i < 3; ++i)
       {
         for (size_t j = 0; j < 6; ++j)
@@ -162,7 +164,7 @@ void flatten(Topo::Wrap<Topo::Type::BODY> _body)
   auto B = M.block(0, split_idx, rows, FIXED_VAR);
   Eigen::Vector4d fixed;
   fixed(0, 0) = fixed(1, 0) = fixed(2, 0) = 0;
-  fixed(3, 0) = -10;
+  fixed(3, 0) = -100;
   auto b = B * fixed;
   //Eigen::SparseQR <Matrix, Eigen::COLAMDOrdering<int>> solver;
   Eigen::LeastSquaresConjugateGradient<Matrix> solver;
