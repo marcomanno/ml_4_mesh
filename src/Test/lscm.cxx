@@ -1,6 +1,8 @@
 //#pragma optimize("", off)
 #include "catch.hpp"
 
+#include <unsupported/Eigen/LevenbergMarquardt>
+
 #include "optimize_function.hxx"
 
 #include "Geo/vector.hh"
@@ -25,6 +27,111 @@ static auto move_to_local_coord(const Geo::VectorD3 _tri[3], Geo::VectorD2 _loc_
 }
 
 using VertexIndMpap = std::map<Topo::Wrap<Topo::Type::VERTEX>, size_t>;
+using Functor = Eigen::DenseFunctor<double>;
+
+struct EnergyFunction : public Functor
+{
+  EnergyFunction(const VertexIndMpap& _vrt_inds, 
+    Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE>& _bf, int _m, int _n) : 
+    Functor(_n, _m),
+    vrt_inds_(_vrt_inds), bf_(_bf)
+  {}
+
+  int operator()(const Functor::InputType &_x, Functor::ValueType& _fvec) const
+  {
+    return compute(_x, &_fvec, nullptr);
+  }
+
+  int df(const Functor::InputType& _x, Functor::JacobianType& _fjac) const
+  {
+    return compute(_x, nullptr, &_fjac);
+  }
+
+private:
+  const VertexIndMpap& vrt_inds_;
+  Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE>& bf_;
+
+  int compute(const Functor::InputType& _x,
+    Functor::ValueType* _fvec, Functor::JacobianType* _fjac) const
+  {
+    if (_fjac != nullptr)
+      _fjac->setZero();
+    const size_t var_nmbr = vrt_inds_.size() * 2;
+    auto INDEX = [var_nmbr](size_t _i, size_t _j) { return _i * var_nmbr + _j; };
+    size_t i_eq_loop = 0;
+    for (auto face : bf_)
+    {
+      // 3 equations per face.
+      size_t i_eq = i_eq_loop;
+      i_eq_loop += 3;
+      Topo::Iterator<Topo::Type::FACE, Topo::Type::VERTEX> fv(face);
+      size_t idx[3];
+      Geo::VectorD3 pts[3];
+      size_t i = 0;
+      for (auto v : fv)
+      {
+        v->geom(pts[i]);
+        idx[i++] = 2 * vrt_inds_.find(v)->second;
+      }
+      Geo::VectorD2 loc_tri[2];
+      auto area_time_2 = move_to_local_coord(pts, loc_tri);
+      auto u10 = _x(idx[1])     - _x(idx[0]);
+      auto u20 = _x(idx[2])     - _x(idx[0]);
+      auto v10 = _x(idx[1] + 1) - _x(idx[0] + 1);
+      auto v20 = _x(idx[2] + 1) - _x(idx[0] + 1);
+      double a = u10 / loc_tri[0][0];
+      double b = (u20 - loc_tri[1][0] * u10 / loc_tri[0][0]) / loc_tri[1][1];
+      double c = v10 / loc_tri[0][0];
+      double d = (v20 - loc_tri[1][0] * v10 / loc_tri[0][0]) / loc_tri[1][1];
+      auto det = a * d - b * c;
+      if (_fvec != nullptr)
+      {
+        (*_fvec)(i_eq) = a - d;
+        (*_fvec)(i_eq + 1) = b + c;
+        (*_fvec)(i_eq + 2) = std::log(det);
+      }
+      if (_fjac == nullptr)
+        continue;
+      Eigen::Matrix<double, 3, 4> dfa;
+      dfa << 1,        0,        0,      -1,
+             0,        1,        1,       0,
+             d / det, -c / det, -b / det, a / det;
+
+      Eigen::Matrix<double, 4, 6> da_uv;
+      auto c0 = 1. / loc_tri[0][0]; // 1 / x_1
+      auto c1 = 1. / loc_tri[1][1]; // 1 / y_2
+      auto c2 = loc_tri[1][0] / (loc_tri[0][0] * loc_tri[1][1]); // x_2 / (x_1 * y_2)
+      da_uv <<
+        -c0, 0, c0, 0, 0, 0,
+        c2 - c1, 0, -c2, 0, c1, 0,
+        0, -c0, 0, c0, 0, 0,
+        0, c2 - c1, 0, -c2, 0, c1;
+      Eigen::Matrix<double, 3, 6> df_uv = dfa * da_uv;
+      for (size_t i = 0; i < 3; ++i)
+      {
+        for (size_t j = 0; j < 6; ++j)
+        {
+          auto val = df_uv(i, j);
+          if (val != 0)
+          {
+            auto r = i_eq + i;
+            auto c = idx[j / 2] + j % 2;
+            _fjac->coeffRef(r, c) = val;
+          }
+        }
+      }
+    }
+    if (_fvec != nullptr)
+      std::cout << "F: " << *_fvec << "\n\n";
+    if (_fjac != nullptr)
+    {
+      //_fjac->makeCompressed();
+      std::cout << "df: " << *_fjac << "\n\n";
+    }
+    return 0;
+  }
+};
+
 
 struct OptimizeNonLinear : public IFunction
 {
@@ -73,10 +180,11 @@ struct OptimizeNonLinear : public IFunction
       double b = (u20 - loc_tri[1][0] * u10 / loc_tri[0][0]) / loc_tri[1][1];
       double c = v10 / loc_tri[0][0];
       double d = (v20 - loc_tri[1][0] * v10 / loc_tri[0][0]) / loc_tri[1][1];
+      auto det = a * d - b * c;
       _f[i_eq] = a - d;
       _f[i_eq + 1] = b + c;
-      auto det = a * d - b * c;
       _f[i_eq + 2] = std::log(det);
+      std::cout << "F: " << _f[i_eq] << _f[i_eq + 1] << _f[i_eq + 2] << std::endl;
       if (_fj == nullptr)
         continue;
       Eigen::Matrix<double, 3, 4> dfa;
@@ -98,7 +206,11 @@ struct OptimizeNonLinear : public IFunction
       for (size_t i = 0; i < 3; ++i)
       {
         for (size_t j = 0; j < 6; ++j)
-          _fj[INDEX(i_eq + i, idx[j / 2] + j % 2)] = df_uv(i, j);
+        {
+          auto val = df_uv(i, j);
+          if (val != 0)
+            _fj[INDEX(i_eq + i, idx[j / 2] + j % 2)] = val;
+        }
       }
     }
     return true;
@@ -163,14 +275,14 @@ void flatten(Topo::Wrap<Topo::Type::BODY> _body)
   auto A = M.block(0, 0, rows, split_idx);
   auto B = M.block(0, split_idx, rows, FIXED_VAR);
   Eigen::Vector4d fixed;
-  fixed(0, 0) = fixed(1, 0) = fixed(2, 0) = 0;
-  fixed(3, 0) = -100;
+  fixed(0, 0) = -100;
+  fixed(1) = fixed(2) = fixed(3) = 0;
+  
   auto b = B * fixed;
   //Eigen::SparseQR <Matrix, Eigen::COLAMDOrdering<int>> solver;
   Eigen::LeastSquaresConjugateGradient<Matrix> solver;
   solver.compute(A);
   Eigen::VectorXd X = solver.solve(b);
-  std::cout << X.rows() << " " << X.cols() << std::endl;
   X.conservativeResize(cols);
   for (size_t i = 0; i < 4; ++i)
     X(split_idx + i, 0) = -fixed(i, 0);
@@ -187,15 +299,20 @@ void flatten(Topo::Wrap<Topo::Type::BODY> _body)
   };
 
   static bool conformal = false;
-  if (conformal)
-    set_x(X.data());
-  else
+  if (!conformal)
   {
+    EnergyFunction ef(vrt_inds, bf, 3 * bf.size(), vrt_inds.size() * 2);
+    Eigen::LevenbergMarquardt lm(ef);
+    auto info = lm.lmder1(X);
+
+#if 0
     OptimizeNonLinear onl(vrt_inds, _body);
     const double* x = onl.compute(X);
     REQUIRE(x != nullptr);
     set_x(x);
+#endif
   }
+  set_x(X.data());
 }
 
 TEST_CASE("flat_00", "[Flattening]")

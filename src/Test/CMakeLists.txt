@@ -50,6 +50,7 @@ add_definitions(-DOUTDIR="${CMAKE_SOURCE_DIR}/../out")
 add_definitions(-DINDIR="${CMAKE_SOURCE_DIR}/Test/Data")
 add_definitions(-DPROTOBUF_USE_DLLS)
 add_definitions(-DMKL_ILP64)
+add_definitions(-DEIGEN_USE_MKL_ALL)
 
 # TODO: Add tests and install targets if needed.
 add_custom_command(TARGET ${project_name}
