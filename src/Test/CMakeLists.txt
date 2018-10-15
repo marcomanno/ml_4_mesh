@@ -20,6 +20,7 @@ target_link_libraries(${project_name}
   Import Topology Geo PolygonTriangularization)
 target_include_directories(${project_name}
   PUBLIC ${CMAKE_SOURCE_DIR}/tensorflow/include
+  PUBLIC ${CMAKE_SOURCE_DIR}/CppNumericalSolvers/include
   PUBLIC ${CMAKE_SOURCE_DIR}/Catch2/single_include/Catch2
   PUBLIC $ENV{MKL_ROOT_DIR}/mkl/include)
   
@@ -31,7 +32,7 @@ add_custom_command(
                 ${CMAKE_SOURCE_DIR}/tensorflow/lib/tensorflow.dll
                 $<TARGET_FILE_DIR:${project_name}>/tensorflow.dll)
 
-target_compile_options(${project_name}  PRIVATE /W3 /WX- /DMKL_ILP64)
+target_compile_options(${project_name}  PRIVATE /W3 /WX- /DMKL_ILP64 /Oi)
 
 set (MKL_LIB_DIR $ENV{MKL_ROOT_DIR}/mkl/lib/intel64)
 set (MKL_LIB_DIR2 $ENV{MKL_ROOT_DIR}/compiler/lib/intel64)
@@ -51,6 +52,8 @@ add_definitions(-DINDIR="${CMAKE_SOURCE_DIR}/Test/Data")
 add_definitions(-DPROTOBUF_USE_DLLS)
 add_definitions(-DMKL_ILP64)
 add_definitions(-DEIGEN_USE_MKL_ALL)
+add_definitions(-DEIGEN_USE_LAPACKE)
+add_definitions(-DMKL_DIRECT_CALL)
 
 # TODO: Add tests and install targets if needed.
 add_custom_command(TARGET ${project_name}

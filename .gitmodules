@@ -1,3 +1,6 @@
 [submodule "src/Catch2"]
 	path = src/Catch2
 	url = https://github.com/catchorg/Catch2
+[submodule "src/CppNumericalSolvers"]
+	path = src/CppNumericalSolvers
+	url = https://github.com/PatWie/CppNumericalSolvers
