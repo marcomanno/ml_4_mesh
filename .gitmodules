@@ -4,3 +4,9 @@
 [submodule "src/CppNumericalSolvers"]
 	path = src/CppNumericalSolvers
 	url = https://github.com/PatWie/CppNumericalSolvers
+[submodule "src/ceres-solver"]
+	path = src/ceres-solver
+	url = https://ceres-solver.googlesource.com/ceres-solver
+[submodule "src/glog"]
+	path = src/glog
+	url = https://github.com/google/glog

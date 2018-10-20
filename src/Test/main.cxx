@@ -104,3 +104,10 @@ TEST_CASE("basic_02", "[RotationOptimization]")
   REQUIRE(R(0, 1) == 1);
   REQUIRE((T(0, 0) == 0. && T(1, 0) == 0.));
 }
+
+#include <crtdbg.h>
+
+int checckk_memeory()
+{
+  return _CrtCheckMemory();
+}

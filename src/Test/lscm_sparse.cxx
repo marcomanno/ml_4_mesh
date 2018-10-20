@@ -1,4 +1,4 @@
-//#pragma optimize("", off)
+#pragma optimize("", off)
 #include "catch.hpp"
 
 #include <unsupported/Eigen/LevenbergMarquardt>
@@ -14,7 +14,9 @@
 #include <Eigen/SparseQR>
 
 #include "xxxxx.hxx"
-namespace {
+
+#include "sparselm/splm.h"
+
 static auto move_to_local_coord(const Geo::VectorD3 _tri[3], Geo::VectorD2 _loc_tri[2])
 {
   auto v_01 = _tri[1] - _tri[0];
@@ -28,9 +30,8 @@ static auto move_to_local_coord(const Geo::VectorD3 _tri[3], Geo::VectorD2 _loc_
 }
 
 using VertexIndMpap = std::map<Topo::Wrap<Topo::Type::VERTEX>, size_t>;
-using Functor = Eigen::SparseFunctor<double, int>;
 
-struct EnergyFunction : public Functor
+struct EnergyFunction
 {
   struct DataOfFace
   {
@@ -41,7 +42,7 @@ struct EnergyFunction : public Functor
 
   EnergyFunction(const VertexIndMpap& _vrt_inds,
     Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE>& _bf, int _m, int _n) :
-    Functor(_n, _m), vrt_inds_(_vrt_inds)
+    n_(_n), m_(_m), vrt_inds_(_vrt_inds)
   {
     for (auto face : _bf)
     {
@@ -57,31 +58,40 @@ struct EnergyFunction : public Functor
       }
       fd.area_time_2_ = move_to_local_coord(pts, fd.loc_tri_);
     }
+    sparse_num_ = 18 * _bf.size();
   }
 
-  int operator()(const Functor::InputType &_x, Functor::ValueType& _fvec) const
+  size_t jacobian_max_size() const { return sparse_num_; }
+
+  int operator()(const double* _x, double* _fvec) const
   {
-    return compute(_x, &_fvec, nullptr);
+    return compute(_x, _fvec, nullptr);
   }
 
-  int df(const Functor::InputType& _x, Functor::JacobianType& _fjac) const
+  int df(const double* _x, splm_crsm& _fjac) const
   {
     return compute(_x, nullptr, &_fjac);
   }
 
+
+
 protected:
   const VertexIndMpap& vrt_inds_;
   std::vector<DataOfFace> data_of_faces_;
+  int m_, n_, sparse_num_;
 
-  int compute(const Functor::InputType& _x,
-    Functor::ValueType* _fvec, Functor::JacobianType* _fjac) const
+  int compute(const double* _x, double* _fvec, splm_crsm* _fjac) const;
+};
+
+int EnergyFunction::compute(const double* _x, double* _fvec, struct splm_crsm* _fjac) const
   {
-    if (_fjac != nullptr) _fjac->setZero();
+    using Triplet = std::tuple<size_t, size_t, double>;
+    std::vector<Triplet> triplets;
 
     auto X = [this, &_x](int _i)
     {
-      if (_i < inputs())
-        return _x(_i);
+      if (_i < n_)
+        return _x[_i];
       else
         return 0.;
     };
@@ -92,8 +102,8 @@ protected:
       // 3 equations per face.
       size_t i_eq = i_eq_loop;
       i_eq_loop += 3;
-      auto u10 = X(fd.idx_[1]) - X(fd.idx_[0]);
-      auto u20 = X(fd.idx_[2]) - X(fd.idx_[0]);
+      auto u10 = X(fd.idx_[1])     - X(fd.idx_[0]);
+      auto u20 = X(fd.idx_[2])     - X(fd.idx_[0]);
       auto v10 = X(fd.idx_[1] + 1) - X(fd.idx_[0] + 1);
       auto v20 = X(fd.idx_[2] + 1) - X(fd.idx_[0] + 1);
       double a = u10 / fd.loc_tri_[0][0];
@@ -103,26 +113,26 @@ protected:
       auto det = a * d - b * c;
       if (_fvec != nullptr)
       {
-        (*_fvec)(i_eq) = a - d;
-        (*_fvec)(i_eq + 1) = b + c;
-        (*_fvec)(i_eq + 2) = std::log(det);
+        _fvec[i_eq]     = a - d;
+        _fvec[i_eq + 1] = b + c;
+        _fvec[i_eq + 2] = std::log(det);
       }
       if (_fjac == nullptr)
         continue;
       Eigen::Matrix<double, 3, 4> dfa;
-      dfa << 1, 0, 0, -1,
-        0, 1, 1, 0,
-        d / det, -c / det, -b / det, a / det;
+      dfa << 1,        0,        0,      -1,
+             0,        1,        1,       0,
+             d / det, -c / det, -b / det, a / det;
 
       Eigen::Matrix<double, 4, 6> da_uv;
       auto c0 = 1. / fd.loc_tri_[0][0]; // 1 / x_1
       auto c1 = 1. / fd.loc_tri_[1][1]; // 1 / y_2
       auto c2 = fd.loc_tri_[1][0] / (fd.loc_tri_[0][0] * fd.loc_tri_[1][1]); // x_2 / (x_1 * y_2)
       da_uv <<
-        -c0, 0, c0, 0, 0, 0,
-        c2 - c1, 0, -c2, 0, c1, 0,
-        0, -c0, 0, c0, 0, 0,
-        0, c2 - c1, 0, -c2, 0, c1;
+             -c0,        0,  c0,   0,  0,  0,
+         c2 - c1,        0, -c2,   0, c1,  0,
+               0,      -c0,   0,  c0,  0,  0,
+               0,  c2  -c1,   0, -c2,  0, c1;
       Eigen::Matrix<double, 3, 6> df_uv = dfa * da_uv;
       for (size_t i = 0; i < 3; ++i)
       {
@@ -132,151 +142,59 @@ protected:
           if (val != 0)
           {
             auto c = fd.idx_[j / 2] + j % 2;
-            if (c < inputs())
-              _fjac->coeffRef(i_eq + i, c) += val;
+            if (c < n_)
+              triplets.emplace_back(i_eq + i, c, val);
           }
         }
       }
     }
-    if (_fjac != nullptr) _fjac->makeCompressed();
-    if (_fvec != nullptr)
+    std::sort(triplets.begin(), triplets.end());
+    for (size_t i = 0; i < triplets.size(); ++i)
     {
-      double sum = 0;
-      for (int i = 0; i < _fvec->rows(); ++i)
-        sum += (*_fvec)(i) * (*_fvec)(i);
-      std::cout << "F: " << sum << "\n\n";
+      for (size_t j = 0; ++j < triplets.size();)
+      {
+        if (std::get<0>(triplets[i]) != std::get<0>(triplets[j]) ||
+          std::get<1>(triplets[i]) != std::get<1>(triplets[j]))
+        {
+          break;
+        }
+        std::get<2>((triplets[i])) += std::get<2>((triplets[j]));
+        std::get<2>((triplets[j])) = 0;
+      }
     }
-#ifdef PRINT
-    if (_fvec != nullptr)
-      std::cout << "F: " << *_fvec << "\n\n";
+    auto new_end = std::remove_if(triplets.begin(), triplets.end(), [](const Triplet& _tr)
+    {
+      return std::get<2>(_tr) == 0;
+    });
+    triplets.erase(new_end, triplets.end());
+    for (size_t i = 0; i < triplets.size(); ++i)
+    {
+      auto& tri = triplets[i];
+      if (i == 0 || std::get<0>(tri) > std::get<0>(triplets[i - 1]))
+        _fjac->rowptr[std::get<0>(tri)] = i;
+      _fjac->val[i] = std::get<double>(tri);
+      _fjac->colidx[i] = std::get<1>(tri);
+    }
     if (_fjac != nullptr)
-      std::cout << "df: " << *_fjac << "\n\n";
-#endif
+    {
+      _fjac->rowptr[m_] = _fjac->nnz = triplets.size();
+      
+    }
+
     return 0;
   }
-};
 
-} // namespace
-
-
-struct EnergySquare : public  IFunctionXXX, EnergyFunction
+static void chainedRosenbrock(double *_p, double *_hx, MKL_INT _m, MKL_INT _n, void *_ef)
 {
-  using EnergyFunction::EnergyFunction;
+  EnergyFunction& ef = *static_cast<EnergyFunction*>(_ef);
+  ef(_p, _hx);
+}
 
-  EnergySquare(const VertexIndMpap& _vrt_inds,
-    Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE>& _bf, int _m, int _n) :
-    EnergyFunction(_vrt_inds, _bf, _m, _n)
-  {
-    f_val_.resize(values(), 1);
-    jac_.resize(values(), inputs());
-  }
-
-  bool valuate(const Eigen::VectorXd& _x, double* _f, Eigen::VectorXd* _df) const
-  {
-    compute(_x, &f_val_, &jac_);
-    if (_f != nullptr)
-      *_f = (f_val_.transpose() * f_val_)(0, 0);
-    if (_df != nullptr)
-      *_df = 2 * (f_val_.transpose() * jac_);
-    return true;
-  }
-
-  mutable Eigen::VectorXd f_val_;
-  mutable Eigen::SparseMatrix<double> jac_;
-
-};
-
-struct OptimizeNonLinear : public IFunction
+void chainedRosenbrock_anjacCRS(double* _p, splm_crsm* _jac, MKL_INT _m, MKL_INT _n, void *_ef)
 {
-  OptimizeNonLinear(const VertexIndMpap& _vrt_inds, Topo::Wrap<Topo::Type::BODY> _body):
-    vrt_inds_(_vrt_inds), bf_(_body) { }
-
-  const double* compute(Eigen::VectorXd& _X)
-  {
-    if (!q_solver_)
-      q_solver_ = IQuadraticSolver::make();
-    rows_ = 3 * bf_.size();
-    cols_ = _X.size();
-    q_solver_->init(rows_, cols_, _X.data());
-    q_solver_->compute(*this);
-    return q_solver_->get_x();
-  }
-
-  bool operator()(const double* _x, double* _f, double* _fj) const override
-  {
-    const size_t var_nmbr = vrt_inds_.size() * 2;
-    auto INDEX = [var_nmbr](size_t _i, size_t _j) { return _i * var_nmbr + _j; };
-    size_t i_eq_loop = 0;
-    if (_fj != nullptr)
-      std::fill_n(_fj, rows_ * cols_, 0.);
-    for (auto face : bf_)
-    {
-      // 3 equations per face.
-      size_t i_eq = i_eq_loop;
-      i_eq_loop += 3;
-      Topo::Iterator<Topo::Type::FACE, Topo::Type::VERTEX> fv(face);
-      size_t idx[3];
-      Geo::VectorD3 pts[3];
-      size_t i = 0;
-      for (auto v : fv)
-      {
-        v->geom(pts[i]);
-        idx[i++] = 2 * vrt_inds_.find(v)->second;
-      }
-      Geo::VectorD2 loc_tri[2];
-      auto area2 = move_to_local_coord(pts, loc_tri);
-      auto u10 = _x[idx[1]] - _x[idx[0]];
-      auto u20 = _x[idx[2]] - _x[idx[0]];
-      auto v10 = _x[idx[1] + 1] - _x[idx[0] + 1];
-      auto v20 = _x[idx[2] + 1] - _x[idx[0] + 1];
-      double a = u10 / loc_tri[0][0];
-      double b = (u20 - loc_tri[1][0] * u10 / loc_tri[0][0]) / loc_tri[1][1];
-      double c = v10 / loc_tri[0][0];
-      double d = (v20 - loc_tri[1][0] * v10 / loc_tri[0][0]) / loc_tri[1][1];
-      auto det = a * d - b * c;
-      _f[i_eq] = a - d;
-      _f[i_eq + 1] = b + c;
-      _f[i_eq + 2] = std::log(det);
-      std::cout << "F: " << _f[i_eq] << _f[i_eq + 1] << _f[i_eq + 2] << std::endl;
-      if (_fj == nullptr)
-        continue;
-      Eigen::Matrix<double, 3, 4> dfa;
-      dfa <<       1,        0,        0,      -1,
-                   0,        1,        1,       0,
-             d / det, -c / det, -b / det, a / det;
-
-      Eigen::Matrix<double, 4, 6> da_uv;
-      auto c0 = 1. / loc_tri[0][0]; // 1 / x_1
-      auto c1 = 1. / loc_tri[1][1]; // 1 / y_2
-      auto c2 = loc_tri[1][0] / (loc_tri[0][0] * loc_tri[1][1]); // x_2 / (x_1 * y_2)
-      da_uv << 
-           -c0,      0,   c0,    0,     0,  0,
-         c2-c1,      0,  -c2,    0,    c1,  0,
-             0,    -c0,    0,   c0,     0,  0,
-             0,  c2-c1,    0,  -c2,     0, c1;
-      Eigen::Matrix<double, 3, 6> df_uv = dfa * da_uv;
-      std::cout << df_uv << std::endl << std::endl;
-      for (size_t i = 0; i < 3; ++i)
-      {
-        for (size_t j = 0; j < 6; ++j)
-        {
-          auto val = df_uv(i, j);
-          if (val != 0)
-            _fj[INDEX(i_eq + i, idx[j / 2] + j % 2)] = val;
-        }
-      }
-    }
-    return true;
-  }
-
-  const VertexIndMpap& vrt_inds_;
-  Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE> bf_;
-  size_t rows_, cols_;
-  std::unique_ptr<IQuadraticSolver> q_solver_;
-};
-
-// Function to minimize 
-
+  EnergyFunction& ef = *static_cast<EnergyFunction*>(_ef);
+  ef.df(_p, *_jac);
+}
 
 
 static void flatten(Topo::Wrap<Topo::Type::BODY> _body)
@@ -354,17 +272,27 @@ static void flatten(Topo::Wrap<Topo::Type::BODY> _body)
   static bool conformal = false;
   if (!conformal)
   {
-    int unknowns = cols - 3;
-    X.conservativeResize(unknowns);
+    int unk_nmbr = cols - 3;
+    auto eq_nmbr = 3 * bf.size();
+    //X.conservativeResize(unk_nmbr);
+    EnergyFunction ef(vrt_inds, bf, eq_nmbr, unk_nmbr);
+    
 
-#if 1
-    EnergySquare es(vrt_inds, bf, 3 * bf.size(), unknowns);
-    minimize(X, es);
-#else
-    EnergyFunction ef(vrt_inds, bf, 3 * bf.size(), unknowns);
-    Eigen::LevenbergMarquardt_xxx lm(ef);
-    auto info = lm.lmder1(X);
-#endif
+    double info[SPLM_INFO_SZ];
+    double opts[SPLM_OPTS_SZ] =
+    {
+      SPLM_INIT_MU,
+      SPLM_STOP_THRESH,
+      SPLM_STOP_THRESH,
+      SPLM_STOP_THRESH,
+      SPLM_DIFF_DELTA,
+      SPLM_PARDISO
+    };
+
+    auto ret = sparselm_dercrs(
+      chainedRosenbrock, chainedRosenbrock_anjacCRS, X.data(), NULL, 
+      unk_nmbr, 0, eq_nmbr, ef.jacobian_max_size(),
+      -1, 1000, opts, info, &ef); // CRS Jacobian
 
     X.conservativeResize(cols);
     X(cols - 1) = X(cols - 2) = X(cols - 3) = 0;
@@ -379,28 +307,28 @@ static void flatten(Topo::Wrap<Topo::Type::BODY> _body)
   set_x(X.data());
 }
 
-TEST_CASE("flat_00", "[Flattening]")
+TEST_CASE("flat_sp_00", "[Flattening]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa0.obj");
   flatten(body);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb0.obj", body);
 }
 
-TEST_CASE("flat_01", "[Flattening]")
+TEST_CASE("flat_sp_01", "[Flattening]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa1.obj");
   flatten(body);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb1.obj", body);
 }
 
-TEST_CASE("flat_02", "[Flattening]")
+TEST_CASE("flat_sp_02", "[Flattening]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa2.obj");
   flatten(body);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb2.obj", body);
 }
 
-TEST_CASE("flat_03", "[Flattening]")
+TEST_CASE("flat_sp_03", "[Flattening]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa3.obj");
   flatten(body);

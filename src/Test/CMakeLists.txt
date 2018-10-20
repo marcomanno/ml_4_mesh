@@ -40,7 +40,7 @@ set (MKL_BIN $ENV{MKL_ROOT_DIR}/redist/intel64/compiler)
 
 target_link_libraries(${project_name}
   "${CMAKE_CURRENT_SOURCE_DIR}/../tensorflow/lib/tensorflow.lib"
-  Import Topology Geo PolygonTriangularization
+  Import Topology Geo PolygonTriangularization splm
    ${MKL_LIB_DIR}/mkl_intel_ilp64.lib
    ${MKL_LIB_DIR}/mkl_sequential.lib 
    ${MKL_LIB_DIR}/mkl_core.lib 
@@ -50,9 +50,9 @@ target_link_libraries(${project_name}
 add_definitions(-DOUTDIR="${CMAKE_SOURCE_DIR}/../out")
 add_definitions(-DINDIR="${CMAKE_SOURCE_DIR}/Test/Data")
 add_definitions(-DPROTOBUF_USE_DLLS)
-add_definitions(-DMKL_ILP64)
 add_definitions(-DEIGEN_USE_MKL_ALL)
 add_definitions(-DEIGEN_USE_LAPACKE)
+add_definitions(-DMKL_ILP64)
 add_definitions(-DMKL_DIRECT_CALL)
 
 # TODO: Add tests and install targets if needed.
