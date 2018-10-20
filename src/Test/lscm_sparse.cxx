@@ -281,7 +281,7 @@ static void flatten(Topo::Wrap<Topo::Type::BODY> _body)
     double info[SPLM_INFO_SZ];
     double opts[SPLM_OPTS_SZ] =
     {
-      SPLM_INIT_MU,
+      0.5,
       SPLM_STOP_THRESH,
       SPLM_STOP_THRESH,
       SPLM_STOP_THRESH,
