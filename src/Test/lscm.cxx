@@ -277,9 +277,7 @@ struct OptimizeNonLinear : public IFunction
 
 // Function to minimize 
 
-
-
-static void flatten(Topo::Wrap<Topo::Type::BODY> _body)
+static void flatten_lscm(Topo::Wrap<Topo::Type::BODY> _body)
 {
   std::map<Topo::Wrap<Topo::Type::VERTEX>, size_t> vrt_inds;
   using Triplet = Eigen::Triplet<double, size_t>;
@@ -382,27 +380,27 @@ static void flatten(Topo::Wrap<Topo::Type::BODY> _body)
 TEST_CASE("flat_00", "[Flattening]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa0.obj");
-  flatten(body);
+  flatten_lscm(body);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb0.obj", body);
 }
 
 TEST_CASE("flat_01", "[Flattening]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa1.obj");
-  flatten(body);
+  flatten_lscm(body);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb1.obj", body);
 }
 
 TEST_CASE("flat_02", "[Flattening]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa2.obj");
-  flatten(body);
+  flatten_lscm(body);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb2.obj", body);
 }
 
 TEST_CASE("flat_03", "[Flattening]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa3.obj");
-  flatten(body);
+  flatten_lscm(body);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb3.obj", body);
 }

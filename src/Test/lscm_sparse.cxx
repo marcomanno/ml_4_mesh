@@ -29,6 +29,23 @@ static auto move_to_local_coord(const Geo::VectorD3 _tri[3], Geo::VectorD2 _loc_
   return area_time_2;
 }
 
+static double area(
+  Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE>& _bf,
+  const std::function<Geo::Point(Topo::Wrap<Topo::Type::VERTEX>&)>& _v_pt)
+{
+  double a = 0;
+  for (auto face : _bf)
+  {
+    // 3 equations per face.
+    Topo::Iterator<Topo::Type::FACE, Topo::Type::VERTEX> fv(face);
+    Geo::Point pt[3];
+    for (int i = 0; i < 3; ++i)
+      pt[i] = _v_pt(fv.get(i));
+    a += Geo::length((pt[1] - pt[0]) % (pt[2] - pt[0]));
+  }
+  return a / 2;
+}
+
 using VertexIndMpap = std::map<Topo::Wrap<Topo::Type::VERTEX>, size_t>;
 
 struct EnergyFunction
@@ -172,7 +189,8 @@ int EnergyFunction::compute(const double* _x, double* _fvec, struct splm_crsm* _
       auto& tri = triplets[i];
       if (i == 0 || std::get<0>(tri) > std::get<0>(triplets[i - 1]))
         _fjac->rowptr[std::get<0>(tri)] = i;
-      _fjac->val[i] = std::get<double>(tri);
+      if (_fjac->val != nullptr)
+        _fjac->val[i] = std::get<double>(tri);
       _fjac->colidx[i] = std::get<1>(tri);
     }
     if (_fjac != nullptr)
@@ -184,27 +202,36 @@ int EnergyFunction::compute(const double* _x, double* _fvec, struct splm_crsm* _
     return 0;
   }
 
-static void chainedRosenbrock(double *_p, double *_hx, MKL_INT _m, MKL_INT _n, void *_ef)
+static void stretch_energy_function(double *_p, double *_hx, MKL_INT _m, MKL_INT _n, void *_ef)
 {
   EnergyFunction& ef = *static_cast<EnergyFunction*>(_ef);
   ef(_p, _hx);
 }
 
-void chainedRosenbrock_anjacCRS(double* _p, splm_crsm* _jac, MKL_INT _m, MKL_INT _n, void *_ef)
+void stretch_energy_function_anjacCRS(double* _p, splm_crsm* _jac, MKL_INT _m, MKL_INT _n, void *_ef)
 {
   EnergyFunction& ef = *static_cast<EnergyFunction*>(_ef);
   ef.df(_p, *_jac);
 }
 
 
-static void flatten(Topo::Wrap<Topo::Type::BODY> _body)
+static void flatten(Topo::Wrap<Topo::Type::BODY> _body, bool _consformal)
 {
+  Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE> bf(_body);
+  auto vertex_point = [](const Topo::Wrap<Topo::Type::VERTEX>& _v)
+  {
+    Geo::Point pt;
+    _v->geom(pt);
+    return pt;
+  };
+
+  auto a0 = area(bf, vertex_point);
+
   std::map<Topo::Wrap<Topo::Type::VERTEX>, size_t> vrt_inds;
   using Triplet = Eigen::Triplet<double, size_t>;
   using Matrix = Eigen::SparseMatrix<double>;
   std::vector<Triplet> coffs;
   size_t rows = 0, pt_nmbr = 0;
-  Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE> bf(_body);
   for (auto face : bf)
   {
     std::array<Geo::VectorD2, 3> w;
@@ -268,9 +295,15 @@ static void flatten(Topo::Wrap<Topo::Type::BODY> _body)
       const_cast<Topo::Wrap<Topo::Type::VERTEX>&>(v_id.first)->set_geom(pt);
     }
   };
+  auto vertex_flat_point = [&X, &vrt_inds](const Topo::Wrap<Topo::Type::VERTEX>& _v)
+  {
+    auto ind = vrt_inds[_v];
+    return Geo::Point{ X(2 * ind), X(2 * ind + 1), 0 };
+  };
+  auto a1 = area(bf, vertex_flat_point);
+  X *= sqrt(a0 / a1);
 
-  static bool conformal = false;
-  if (!conformal)
+  if (!_consformal)
   {
     int unk_nmbr = cols - 3;
     auto eq_nmbr = 3 * bf.size();
@@ -289,10 +322,18 @@ static void flatten(Topo::Wrap<Topo::Type::BODY> _body)
       SPLM_PARDISO
     };
 
-    auto ret = sparselm_dercrs(
-      chainedRosenbrock, chainedRosenbrock_anjacCRS, X.data(), NULL, 
+//#define AUTODIFF
+#ifdef AUTODIFF
+    auto ret = sparselm_difcrs(
+      chainedRosenbrock, chainedRosenbrock_anjacCRS, X.data(), NULL,
       unk_nmbr, 0, eq_nmbr, ef.jacobian_max_size(),
       -1, 1000, opts, info, &ef); // CRS Jacobian
+#else
+    auto ret = sparselm_dercrs(
+      stretch_energy_function, stretch_energy_function_anjacCRS, X.data(), NULL, 
+      unk_nmbr, 0, eq_nmbr, ef.jacobian_max_size(),
+      -1, 10000, opts, info, &ef); // CRS Jacobian
+#endif
 
     X.conservativeResize(cols);
     X(cols - 1) = X(cols - 2) = X(cols - 3) = 0;
@@ -303,34 +344,106 @@ static void flatten(Topo::Wrap<Topo::Type::BODY> _body)
     REQUIRE(x != nullptr);
     set_x(x);
 #endif
+    auto a1 = area(bf, vertex_flat_point);
+    X *= sqrt(a0 / a1);
   }
   set_x(X.data());
 }
 
-TEST_CASE("flat_sp_00", "[Flattening]")
+TEST_CASE("flat_sp_00", "[FlatteningSP]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa0.obj");
-  flatten(body);
+  flatten(body, false);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb0.obj", body);
 }
 
-TEST_CASE("flat_sp_01", "[Flattening]")
+TEST_CASE("flat_sp_00_conf", "[FlatteningSP]")
+{
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa0.obj");
+  flatten(body, true);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb0_conf.obj", body);
+}
+
+TEST_CASE("flat_sp_01", "[FlatteningSP]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa1.obj");
-  flatten(body);
+  flatten(body, false);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb1.obj", body);
 }
 
-TEST_CASE("flat_sp_02", "[Flattening]")
+TEST_CASE("flat_sp_01_conf", "[FlatteningSP]")
+{
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa1.obj");
+  flatten(body, true);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb1_conf.obj", body);
+}
+
+TEST_CASE("flat_sp_02", "[FlatteningSP]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa2.obj");
-  flatten(body);
+  flatten(body, false);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb2.obj", body);
 }
 
-TEST_CASE("flat_sp_03", "[Flattening]")
+TEST_CASE("flat_sp_02_conf", "[FlatteningSP]")
+{
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa2.obj");
+  flatten(body, true);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb2_conf.obj", body);
+}
+
+TEST_CASE("flat_sp_03", "[FlatteningSP]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa3.obj");
-  flatten(body);
+  flatten(body, false);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb3.obj", body);
+}
+
+TEST_CASE("flat_sp_03_conf", "[FlatteningSP]")
+{
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa3.obj");
+  flatten(body, true);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb3_conf.obj", body);
+}
+
+TEST_CASE("flat_sp_04", "[FlatteningSP]")
+{
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa4.obj");
+  flatten(body, false);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb4.obj", body);
+}
+
+TEST_CASE("flat_sp_04_conf", "[FlatteningSP]")
+{
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa4.obj");
+  flatten(body, true);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb4_conf.obj", body);
+}
+
+TEST_CASE("flat_sp_05", "[FlatteningSP]")
+{
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa5.obj");
+  flatten(body, false);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb5.obj", body);
+}
+
+TEST_CASE("flat_sp_05_conf", "[FlatteningSP]")
+{
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa5.obj");
+  flatten(body, true);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb5_conf.obj", body);
+}
+
+TEST_CASE("flat_sp_06", "[FlatteningSP]")
+{
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa6.obj");
+  flatten(body, false);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb6.obj", body);
+}
+
+TEST_CASE("flat_sp_06_conf", "[FlatteningSP]")
+{
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa6.obj");
+  flatten(body, true);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb6_conf.obj", body);
 }
