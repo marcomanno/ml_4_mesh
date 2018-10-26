@@ -54,7 +54,7 @@ struct EnergyFunction
   {
     Geo::VectorD2 loc_tri_[2];
     size_t idx_[3];
-    double area_time_2_;
+    double area_sqrt_;
   };
 
   EnergyFunction(const VertexIndMpap& _vrt_inds,
@@ -73,7 +73,7 @@ struct EnergyFunction
         v->geom(pts[i]);
         fd.idx_[i++] = 2 * vrt_inds_.find(v)->second;
       }
-      fd.area_time_2_ = move_to_local_coord(pts, fd.loc_tri_);
+      fd.area_sqrt_ = sqrt(move_to_local_coord(pts, fd.loc_tri_) * 0.5);
     }
     sparse_num_ = 18 * _bf.size();
   }
@@ -130,9 +130,9 @@ int EnergyFunction::compute(const double* _x, double* _fvec, struct splm_crsm* _
       auto det = a * d - b * c;
       if (_fvec != nullptr)
       {
-        _fvec[i_eq]     = a - d;
-        _fvec[i_eq + 1] = b + c;
-        _fvec[i_eq + 2] = std::log(det);
+        _fvec[i_eq]     = fd.area_sqrt_ * (a - d);
+        _fvec[i_eq + 1] = fd.area_sqrt_ * (b + c);
+        _fvec[i_eq + 2] = fd.area_sqrt_ * (std::log(det));
       }
       if (_fjac == nullptr)
         continue;
@@ -150,7 +150,7 @@ int EnergyFunction::compute(const double* _x, double* _fvec, struct splm_crsm* _
          c2 - c1,        0, -c2,   0, c1,  0,
                0,      -c0,   0,  c0,  0,  0,
                0,  c2  -c1,   0, -c2,  0, c1;
-      Eigen::Matrix<double, 3, 6> df_uv = dfa * da_uv;
+      Eigen::Matrix<double, 3, 6> df_uv = fd.area_sqrt_ * dfa * da_uv;
       for (size_t i = 0; i < 3; ++i)
       {
         for (size_t j = 0; j < 6; ++j)
@@ -250,10 +250,10 @@ static void flatten(Topo::Wrap<Topo::Type::BODY> _body, bool _consformal)
       ++i;
     }
     Geo::VectorD2 loc_tri[2];
-    auto area_time_2_sqr = sqrt(move_to_local_coord(pts, loc_tri));
-    w[0] = (loc_tri[1] - loc_tri[0]) / area_time_2_sqr;
-    w[1] =  -loc_tri[1] / area_time_2_sqr;
-    w[2] = loc_tri[0] / area_time_2_sqr;
+    auto area_time_2_sqrt = sqrt(move_to_local_coord(pts, loc_tri));
+    w[0] = (loc_tri[1] - loc_tri[0]) / area_time_2_sqrt;
+    w[1] =  -loc_tri[1] / area_time_2_sqrt;
+    w[2] = loc_tri[0] / area_time_2_sqrt;
 
     for (size_t j = 0; j < 3; ++j)
     {
@@ -446,4 +446,18 @@ TEST_CASE("flat_sp_06_conf", "[FlatteningSP]")
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa6.obj");
   flatten(body, true);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb6_conf.obj", body);
+}
+
+TEST_CASE("flat_sp_07", "[FlatteningSP]")
+{
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa7.obj");
+  flatten(body, false);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb7.obj", body);
+}
+
+TEST_CASE("flat_sp_07_conf", "[FlatteningSP]")
+{
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa7.obj");
+  flatten(body, true);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb7_conf.obj", body);
 }

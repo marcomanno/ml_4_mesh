@@ -417,7 +417,7 @@ static MKL_INT splm_core(
 )
 {
 register MKL_INT i, j, ii=0, jj; /* -Wall */
-const MKL_INT verbose=0;
+const MKL_INT verbose=1;
 
 /* variables related to the Jacobian; jac_ccs & jac_crs are *not* used simultaneously */
 struct splm_ccsm jac_ccs; /* CCS structure for the Jacobian J */

@@ -40,7 +40,8 @@ ENDIF(0)
 # CHOLMOD_INCDIR, CHOLMOD_INCDIR, etc), it is defined to be empty.
 SET(SUITESPARSE_PATH "")
 
-SET(USE_ATA_QUADS 1 CACHE BOOL "Use quads to speed up the calculation of A^t*A?")
+#set(USE_ATA_QUADS true CACHE BOOL "Use quads to speed up the calculation of A^t*A?" FORCE)
+#add_definitions(-DUSE_ATA_QUADS )
 set(BUILD_DEMO false)
 
 
@@ -51,7 +52,7 @@ SET(NEED_METIS FALSE)
 # header file paths
 IF(HAVE_MKL)
   SET(MKL_INCDIR $ENV{MKL_ROOT_DIR}/mkl/include)
-  SET(MKL_INCDIR "C:/Program Files/Intel/MKL/10.2.2.025/include" CACHE PATH "Path to header files for the MKL library")
+#  SET(MKL_INCDIR "C:/Program Files/Intel/MKL/10.2.2.025/include" CACHE PATH "Path to header files for the MKL library")
 ENDIF(HAVE_MKL)
 
 IF(HAVE_CHOLMOD)

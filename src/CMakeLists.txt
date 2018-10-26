@@ -3,7 +3,7 @@
 #
 cmake_minimum_required (VERSION 3.8)
 
-project (TensorFlowExperiments)
+project(TensorFlowExperiments)
 
 if(MSVC)
 add_definitions(-D_USE_MATH_DEFINES)
@@ -13,9 +13,16 @@ add_definitions(-DMKL_DIRECT_CALL)
 endif(MSVC)
 
 set(EIGEN_INCLUDE_DIR "C:/Users/USER/source/repos/3p/Eigen")
-SET(BUILD_TESTING OFF CACHE BOOL "Use some expat option")
-SET(BUILD_BENCHMARKS OFF CACHE BOOL "Use some expat option 2")
+set(BUILD_TESTING OFF CACHE BOOL "Use some expat option")
+set(BUILD_BENCHMARKS OFF CACHE BOOL "Use some expat option 2")
 set(MINIGLOG on)
+
+add_definitions(-DPROTOBUF_USE_DLLS)
+add_definitions(-DEIGEN_USE_MKL_ALL)
+add_definitions(-DEIGEN_USE_LAPACKE)
+add_definitions(-DMKL_ILP64)
+add_definitions(-DMKL_DIRECT_CALL)
+include_directories($ENV{MKL_ROOT_DIR}/mkl/include)
 
 # Include sub-projects.
 #add_subdirectory(tensorflow)

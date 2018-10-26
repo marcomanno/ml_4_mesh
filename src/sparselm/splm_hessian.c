@@ -878,7 +878,7 @@ register uint32_t low;
       j=1;
       break;
     default: /* should not reach this point */
-      fprintf(stderr, "uncompressS9_ndecr(): internal error (unexpected selector %Id)\n", sel);
+      fprintf(stderr, "uncompressS9_ndecr(): internal error (unexpected selector %d)\n", sel);
       exit(1);
   }
 
@@ -1102,7 +1102,7 @@ register uint32_t low;
       j=1;
       break;
     default: /* should not reach this point */
-      fprintf(stderr, "uncompressS9(): internal error (unexpected selector %Id)\n", sel);
+      fprintf(stderr, "uncompressS9(): internal error (unexpected selector %d)\n", sel);
       exit(1);
   }
 

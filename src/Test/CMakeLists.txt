@@ -21,8 +21,7 @@ target_link_libraries(${project_name}
 target_include_directories(${project_name}
   PUBLIC ${CMAKE_SOURCE_DIR}/tensorflow/include
   PUBLIC ${CMAKE_SOURCE_DIR}/CppNumericalSolvers/include
-  PUBLIC ${CMAKE_SOURCE_DIR}/Catch2/single_include/Catch2
-  PUBLIC $ENV{MKL_ROOT_DIR}/mkl/include)
+  PUBLIC ${CMAKE_SOURCE_DIR}/Catch2/single_include/Catch2)
   
 target_compile_definitions(${project_name} PRIVATE NOMINMAX EIGEN_DEFAULT_DENSE_INDEX_TYPE=std::int64_t)
 
@@ -49,11 +48,6 @@ target_link_libraries(${project_name}
 
 add_definitions(-DOUTDIR="${CMAKE_SOURCE_DIR}/../out")
 add_definitions(-DINDIR="${CMAKE_SOURCE_DIR}/Test/Data")
-add_definitions(-DPROTOBUF_USE_DLLS)
-add_definitions(-DEIGEN_USE_MKL_ALL)
-add_definitions(-DEIGEN_USE_LAPACKE)
-add_definitions(-DMKL_ILP64)
-add_definitions(-DMKL_DIRECT_CALL)
 
 # TODO: Add tests and install targets if needed.
 add_custom_command(TARGET ${project_name}
