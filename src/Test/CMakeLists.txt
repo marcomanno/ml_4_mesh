@@ -23,8 +23,6 @@ target_include_directories(${project_name}
   PUBLIC ${CMAKE_SOURCE_DIR}/CppNumericalSolvers/include
   PUBLIC ${CMAKE_SOURCE_DIR}/Catch2/single_include/Catch2)
   
-target_compile_definitions(${project_name} PRIVATE NOMINMAX EIGEN_DEFAULT_DENSE_INDEX_TYPE=std::int64_t)
-
 add_custom_command(
         TARGET ${project_name} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy
@@ -33,17 +31,9 @@ add_custom_command(
 
 target_compile_options(${project_name}  PRIVATE /W3 /WX- /DMKL_ILP64 /Oi)
 
-set (MKL_LIB_DIR $ENV{MKL_ROOT_DIR}/mkl/lib/intel64)
-set (MKL_LIB_DIR2 $ENV{MKL_ROOT_DIR}/compiler/lib/intel64)
-set (MKL_BIN $ENV{MKL_ROOT_DIR}/redist/intel64/compiler)
-
 target_link_libraries(${project_name}
   "${CMAKE_CURRENT_SOURCE_DIR}/../tensorflow/lib/tensorflow.lib"
-  Import Topology Geo PolygonTriangularization splm
-   ${MKL_LIB_DIR}/mkl_intel_ilp64.lib
-   ${MKL_LIB_DIR}/mkl_sequential.lib 
-   ${MKL_LIB_DIR}/mkl_core.lib 
-   ${MKL_LIB_DIR2}/libiomp5md.lib)
+  Import Topology Geo PolygonTriangularization splm splm_lib ${MKL_LIBS})
 
 
 add_definitions(-DOUTDIR="${CMAKE_SOURCE_DIR}/../out")

@@ -15,12 +15,10 @@ file(GLOB CXX_FILES ${CMAKE_CURRENT_SOURCE_DIR} "*.cxx")
 add_executable(MeshSegmentation ${CXX_FILES} ${HXX_FILES})
 target_link_libraries(MeshSegmentation 
   "${CMAKE_CURRENT_SOURCE_DIR}/../tensorflow/lib/tensorflow.lib"
-  Import Topology Geo PolygonTriangularization)
+  Import Topology Geo PolygonTriangularization ${MKL_LIBS})
 target_include_directories(MeshSegmentation PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/../tensorflow/include")
   
-target_compile_definitions(MeshSegmentation PRIVATE NOMINMAX EIGEN_DEFAULT_DENSE_INDEX_TYPE=std::int64_t)
-
 add_custom_command(
         TARGET MeshSegmentation POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy
