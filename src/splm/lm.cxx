@@ -22,7 +22,7 @@ struct SparseLM : public ISparseLM
   };
   SparseLM(const IMultiFunction& _fun) : fun_(_fun), m_(_fun.rows()), n_(_fun.cols()) {}
   bool compute(ColumnVector& _x, MKL_INT _max_iterations) override;
-  void compute_internal(ColumnVector& _x, MKL_INT _max_iterations);
+  SparseLM::Stop compute_internal(ColumnVector& _x, MKL_INT _max_iterations);
 private:
   const IMultiFunction& fun_;
   MKL_INT m_, n_;
@@ -39,23 +39,15 @@ std::unique_ptr<ISparseLM> ISparseLM::make(IMultiFunction& _fun)
 
 bool SparseLM::compute(ColumnVector& _x, MKL_INT _max_iterations)
 {
-  try
-  {
-    compute_internal(_x, _max_iterations);
-  }
-  catch (const Stop& _stop)
-  {
-    return _stop < Stop::BAD_NUMBER;
-  }
-  return false;
+  auto stop_condition = compute_internal(_x, _max_iterations);
+  return stop_condition < Stop::BAD_NUMBER;
 }
 
-
-void SparseLM::compute_internal(ColumnVector& _x, MKL_INT _max_iterations)
+SparseLM::Stop SparseLM::compute_internal(ColumnVector& _x, MKL_INT _max_iterations)
 {
   double tau = 0.5;
   double eps1 = 1e-12;
-  double eps2 = 1e-5;
+  double eps2 = 1e-8;
   double eps2_sq = square(eps2);
   double eps3 = 1e-12;
   double delta = 1e-6;
@@ -66,20 +58,16 @@ void SparseLM::compute_internal(ColumnVector& _x, MKL_INT _max_iterations)
 
   fun_.evaluate(_x, f_val);
   auto p_eL2 = f_val.squaredNorm();
-  Stop stop = Stop::CONT;
   std::cout << "Err=" << p_eL2 << std::endl;
   if (std::isnan(p_eL2) || std::isinf(p_eL2))
-    stop = Stop::BAD_NUMBER;
+    return Stop::BAD_NUMBER;
   Matrix jac(m_, n_);
   auto init_p_eL2 = p_eL2;
   double mu = 0; // damping constant
   for (MKL_INT iter = 0; iter < _max_iterations; ++iter)
   {
     if (p_eL2 <= eps3)
-    {
-      stop = Stop::RESIDUAL_ZERO;
-      break;
-    }
+      return Stop::RESIDUAL_ZERO;
     jac.setZero();
     fun_.jacobian(_x, jac);
     Matrix jacTjac = jac.transpose() * jac;
@@ -87,7 +75,7 @@ void SparseLM::compute_internal(ColumnVector& _x, MKL_INT _max_iterations)
     auto jacTe_inf = jacTe.lpNorm<Eigen::Infinity>();
 
     if ((jacTe_inf <= eps1))
-      throw Stop::JAC_ZERO;
+      return Stop::JAC_ZERO;
 
     auto p_L2 = _x.squaredNorm();
     auto diagHess = jacTjac.diagonal();
@@ -114,17 +102,17 @@ void SparseLM::compute_internal(ColumnVector& _x, MKL_INT _max_iterations)
 #endif
       auto dp_L2 = dx.squaredNorm();
 
-      if (dp_L2 <= eps2_sq * p_L2)
-        throw Stop::ZERO_DX;  // relative change in p is small, stop
+      if (iter > 0 && dp_L2 <= eps2_sq * p_L2)
+        return Stop::ZERO_DX;  // relative change in p is small, stop
 
       if (dp_L2 * SPLM_EPSILON_SQ >= (p_L2 + eps2))
-        throw Stop::SINGULAR; // almost singular
+        return Stop::SINGULAR; // almost singular
       auto pdx = _x + dx;
       fun_.evaluate(pdx, f_val);
       auto pdp_eL2 = f_val.squaredNorm();
       std::cout << std::setprecision(17) << "Err=" << pdp_eL2 << std::endl;
       if (std::isnan(pdp_eL2) || std::isinf(pdp_eL2))
-        throw Stop::BAD_NUMBER;
+        return Stop::BAD_NUMBER;
 
       auto dF = p_eL2 - pdp_eL2;
       if (dF > 0.0)

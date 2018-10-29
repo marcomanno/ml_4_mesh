@@ -1,13 +1,11 @@
 #include "catch.hpp"
 
-#include <unsupported/Eigen/LevenbergMarquardt>
-
-#include "optimize_function.hxx"
-
 #include "Geo/vector.hh"
 #include "Import/load_obj.hh"
 #include "Import/save_obj.hh"
 #include "Topology/iterator.hh"
+
+#include <Eigen/PardisoSupport>
 
 #include "splm/lm.hxx"
 
@@ -223,21 +221,28 @@ static void flatten(Topo::Wrap<Topo::Type::BODY> _body, bool _consformal)
     rows += 2;
   }
   const auto cols = 2 * pt_nmbr;
-  Matrix M(rows, cols);
+  LM::Matrix M(rows, cols);
   M.setFromTriplets(coffs.begin(), coffs.end());
   const auto FIXED_VAR = 4;
   auto split_idx = cols - FIXED_VAR;
   auto A = M.block(0, 0, rows, split_idx);
   auto B = M.block(0, split_idx, rows, FIXED_VAR);
   Eigen::Vector4d fixed;
-  fixed(0, 0) = -100;
+  fixed(0) = -100;
   fixed(1) = fixed(2) = fixed(3) = 0;
 
   auto b = B * fixed;
+#if 0
   //Eigen::SparseQR <Matrix, Eigen::COLAMDOrdering<int>> solver;
   Eigen::LeastSquaresConjugateGradient<Matrix> solver;
   solver.compute(A);
   Eigen::VectorXd X = solver.solve(b);
+#else
+  Eigen::PardisoLDLT<LM::Matrix> lsolver;
+  lsolver.compute(A.transpose() * A);
+  Eigen::VectorXd rhs = A.transpose() * b;
+  Eigen::VectorXd X = lsolver.solve(rhs);
+#endif
   X.conservativeResize(cols);
   for (size_t i = 0; i < 4; ++i)
     X(split_idx + i, 0) = -fixed(i, 0);
@@ -280,128 +285,163 @@ static void flatten(Topo::Wrap<Topo::Type::BODY> _body, bool _consformal)
 
 } // namespace
 
-TEST_CASE("flat_sp2_00", "[FlatteningSP]")
+TEST_CASE("flat_sp2_00", "[Flattening2SP]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa0.obj");
   flatten(body, false);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb0.obj", body);
 }
 
-TEST_CASE("flat_sp2_00_conf", "[FlatteningSP]")
+TEST_CASE("flat_sp2_00_conf", "[Flattening2SP]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa0.obj");
   flatten(body, true);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb0_conf.obj", body);
 }
 
-TEST_CASE("flat_sp2_01", "[FlatteningSP]")
+TEST_CASE("flat_sp2_01", "[Flattening2SP]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa1.obj");
   flatten(body, false);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb1.obj", body);
 }
 
-TEST_CASE("flat_sp2_01_conf", "[FlatteningSP]")
+TEST_CASE("flat_sp2_01_conf", "[Flattening2SP]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa1.obj");
   flatten(body, true);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb1_conf.obj", body);
 }
 
-TEST_CASE("flat_sp2_02", "[FlatteningSP]")
+TEST_CASE("flat_sp2_02", "[Flattening2SP]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa2.obj");
   flatten(body, false);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb2.obj", body);
 }
 
-TEST_CASE("flat_sp2_02_conf", "[FlatteningSP]")
+TEST_CASE("flat_sp2_02_conf", "[Flattening2SP]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa2.obj");
   flatten(body, true);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb2_conf.obj", body);
 }
 
-TEST_CASE("flat_sp2_03", "[FlatteningSP]")
+TEST_CASE("flat_sp2_03", "[Flattening2SP]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa3.obj");
   flatten(body, false);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb3.obj", body);
 }
 
-TEST_CASE("flat_sp2_03_conf", "[FlatteningSP]")
+TEST_CASE("flat_sp2_03_conf", "[Flattening2SP]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa3.obj");
   flatten(body, true);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb3_conf.obj", body);
 }
 
-TEST_CASE("flat_sp2_04", "[FlatteningSP]")
+TEST_CASE("flat_sp2_04", "[Flattening2SP]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa4.obj");
   flatten(body, false);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb4.obj", body);
 }
 
-TEST_CASE("flat_sp2_04_conf", "[FlatteningSP]")
+TEST_CASE("flat_sp2_04_conf", "[Flattening2SP]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa4.obj");
   flatten(body, true);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb4_conf.obj", body);
 }
 
-TEST_CASE("flat_sp2_05", "[FlatteningSP]")
+TEST_CASE("flat_sp2_05", "[Flattening2SP]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa5.obj");
   flatten(body, false);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb5.obj", body);
 }
 
-TEST_CASE("flat_sp2_05_conf", "[FlatteningSP]")
+TEST_CASE("flat_sp2_05_conf", "[Flattening2SP]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa5.obj");
   flatten(body, true);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb5_conf.obj", body);
 }
 
-TEST_CASE("flat_sp2_06", "[FlatteningSP]")
+TEST_CASE("flat_sp2_06", "[Flattening2SP]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa6.obj");
   flatten(body, false);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb6.obj", body);
 }
 
-TEST_CASE("flat_sp2_06_conf", "[FlatteningSP]")
+TEST_CASE("flat_sp2_06_conf", "[Flattening2SP]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa6.obj");
   flatten(body, true);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb6_conf.obj", body);
 }
 
-TEST_CASE("flat_sp2_07", "[FlatteningSP]")
+TEST_CASE("flat_sp2_07", "[Flattening2SP]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa7.obj");
   flatten(body, false);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb7.obj", body);
 }
 
-TEST_CASE("flat_sp2_07_conf", "[FlatteningSP]")
+TEST_CASE("flat_sp2_07_conf", "[Flattening2SP]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa7.obj");
   flatten(body, true);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb7_conf.obj", body);
 }
 
-TEST_CASE("flat_sp2_08", "[FlatteningSP]")
+TEST_CASE("flat_sp2_08", "[Flattening2SP]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa8.obj");
   flatten(body, false);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb8.obj", body);
 }
 
-TEST_CASE("flat_sp2_08_conf", "[FlatteningSP]")
+TEST_CASE("flat_sp2_08_conf", "[Flattening2SP]")
 {
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa8.obj");
   flatten(body, true);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb8_conf.obj", body);
+}
+
+TEST_CASE("flat_sp2_09", "[Flattening2SP]")
+{
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa9.obj");
+  flatten(body, false);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb9.obj", body);
+}
+
+TEST_CASE("flat_sp2_09_conf", "[Flattening2SP]")
+{
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa9.obj");
+  flatten(body, true);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb9_conf.obj", body);
+}
+
+TEST_CASE("flat_sp2_a00", "[Flattening2SP]")
+{
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaaa00.obj");
+  flatten(body, false);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbbb00.obj", body);
+}
+
+TEST_CASE("flat_sp2_a00_conf", "[Flattening2SP]")
+{
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaaa00.obj");
+  flatten(body, true);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbbb00_conf.obj", body);
+}
+
+TEST_CASE("flat_sp2_a01", "[Flattening2SP]")
+{
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaaa01.obj");
+  flatten(body, false);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbbb01.obj", body);
 }
