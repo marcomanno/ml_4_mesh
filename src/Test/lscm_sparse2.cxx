@@ -74,11 +74,11 @@ struct EnergyFunction : LM::IMultiFunction
     }
   }
 
-  bool evaluate(const Eigen::VectorXd& _x, Eigen::VectorXd& _f) const override
+  bool evaluate(const LM::ColumnVector& _x, LM::ColumnVector& _f) const override
   {
     return compute(_x, &_f, nullptr);
   }
-  bool jacobian(const Eigen::VectorXd& _x, Eigen::SparseMatrix<double>& _fj) const override
+  bool jacobian(const LM::ColumnVector& _x, LM::Matrix& _fj) const override
   {
     return compute(_x, nullptr, &_fj);
   }
@@ -97,12 +97,12 @@ protected:
   std::vector<DataOfFace> data_of_faces_;
   int m_, n_;
 
-  int compute(const Eigen::VectorXd& _x,
-    Eigen::VectorXd* _fvec, Eigen::SparseMatrix<double>* _fjac) const;
+  int compute(const LM::ColumnVector& _x,
+    LM::ColumnVector* _fvec, LM::Matrix* _fjac) const;
 };
 
 int EnergyFunction::compute(const Eigen::VectorXd& _x,
-  Eigen::VectorXd* _fvec, Eigen::SparseMatrix<double>* _fjac) const
+  LM::ColumnVector* _fvec, LM::Matrix* _fjac) const
 {
   std::vector<Eigen::Triplet<double>> triplets;
 
@@ -390,4 +390,18 @@ TEST_CASE("flat_sp2_07_conf", "[FlatteningSP]")
   auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa7.obj");
   flatten(body, true);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb7_conf.obj", body);
+}
+
+TEST_CASE("flat_sp2_08", "[FlatteningSP]")
+{
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa8.obj");
+  flatten(body, false);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb8.obj", body);
+}
+
+TEST_CASE("flat_sp2_08_conf", "[FlatteningSP]")
+{
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaa8.obj");
+  flatten(body, true);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb8_conf.obj", body);
 }

@@ -1,5 +1,7 @@
 #include "lm.hxx"
 
+#include <Eigen/PardisoSupport>
+
 #include <cmath>
 #include <iostream>
 #include <iomanip>
@@ -19,8 +21,8 @@ struct SparseLM : public ISparseLM
     ANOVERFLOW
   };
   SparseLM(const IMultiFunction& _fun) : fun_(_fun), m_(_fun.rows()), n_(_fun.cols()) {}
-  bool compute(Eigen::VectorXd& _x, MKL_INT _max_iterations) override;
-  void compute_internal(Eigen::VectorXd& _x, MKL_INT _max_iterations);
+  bool compute(ColumnVector& _x, MKL_INT _max_iterations) override;
+  void compute_internal(ColumnVector& _x, MKL_INT _max_iterations);
 private:
   const IMultiFunction& fun_;
   MKL_INT m_, n_;
@@ -35,7 +37,7 @@ std::unique_ptr<ISparseLM> ISparseLM::make(IMultiFunction& _fun)
 #define SPLM_EPSILON       1E-12
 #define SPLM_EPSILON_SQ    ( (SPLM_EPSILON)*(SPLM_EPSILON) )
 
-bool SparseLM::compute(Eigen::VectorXd& _x, MKL_INT _max_iterations)
+bool SparseLM::compute(ColumnVector& _x, MKL_INT _max_iterations)
 {
   try
   {
@@ -49,7 +51,7 @@ bool SparseLM::compute(Eigen::VectorXd& _x, MKL_INT _max_iterations)
 }
 
 
-void SparseLM::compute_internal(Eigen::VectorXd& _x, MKL_INT _max_iterations)
+void SparseLM::compute_internal(ColumnVector& _x, MKL_INT _max_iterations)
 {
   double tau = 0.5;
   double eps1 = 1e-12;
@@ -58,8 +60,8 @@ void SparseLM::compute_internal(Eigen::VectorXd& _x, MKL_INT _max_iterations)
   double eps3 = 1e-12;
   double delta = 1e-6;
 
-  Eigen::VectorXd dx;
-  Eigen::VectorXd f_val(m_);
+  ColumnVector dx;
+  ColumnVector f_val(m_);
   MKL_INT nu = 2;
 
   fun_.evaluate(_x, f_val);
@@ -68,7 +70,7 @@ void SparseLM::compute_internal(Eigen::VectorXd& _x, MKL_INT _max_iterations)
   std::cout << "Err=" << p_eL2 << std::endl;
   if (std::isnan(p_eL2) || std::isinf(p_eL2))
     stop = Stop::BAD_NUMBER;
-  Eigen::SparseMatrix<double> jac(m_, n_);
+  Matrix jac(m_, n_);
   auto init_p_eL2 = p_eL2;
   double mu = 0; // damping constant
   for (MKL_INT iter = 0; iter < _max_iterations; ++iter)
@@ -80,8 +82,8 @@ void SparseLM::compute_internal(Eigen::VectorXd& _x, MKL_INT _max_iterations)
     }
     jac.setZero();
     fun_.jacobian(_x, jac);
-    Eigen::SparseMatrix<double> jacTjac = jac.transpose() * jac;
-    auto jacTe = -jac.transpose() * f_val;
+    Matrix jacTjac = jac.transpose() * jac;
+    ColumnVector jacTe = -jac.transpose() * f_val;
     auto jacTe_inf = jacTe.lpNorm<Eigen::Infinity>();
 
     if ((jacTe_inf <= eps1))
@@ -100,10 +102,16 @@ void SparseLM::compute_internal(Eigen::VectorXd& _x, MKL_INT _max_iterations)
     for (;;)
     {
       diagHess.array() += muincr;
-      Eigen::ConjugateGradient<Eigen::SparseMatrix<double>, 
+#if 0
+      Eigen::ConjugateGradient<Matrix, 
         Eigen::Lower | Eigen::Upper> cg;
       cg.compute(jacTjac);
       dx = cg.solve(jacTe);
+#else
+      Eigen::PardisoLDLT<Matrix> lsolver;
+      lsolver.compute(jacTjac);
+      dx = lsolver.solve(jacTe);
+#endif
       auto dp_L2 = dx.squaredNorm();
 
       if (dp_L2 <= eps2_sq * p_L2)
