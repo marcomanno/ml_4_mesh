@@ -34,14 +34,15 @@ void find_optimal_rotation(
   Eigen::JacobiSVD<Eigen::MatrixXd> svd(S, Eigen::ComputeFullU | Eigen::ComputeFullV);
   auto U = svd.matrixU();
   auto V = svd.matrixV();
-  Matrix m(N, N);
+  Matrix m(2, 2);
   m.setIdentity();
-  m(N-1, N-1) = (U * V.transpose()).determinant();
+  m(1, 1) = (U * V.transpose()).determinant();
   _R = V * m * U.transpose();
   Eigen::Vector2d P, Q;
   P << p_m[0][0], p_m[0][1];
   Q << p_m[1][0], p_m[1][1];
   _T = Q - _R * P;
+  std::cout << "====================\n";
   for (int i = 0; i < 2; ++i)
   {
     for (int j = 0; j < 2; ++j)
@@ -49,6 +50,7 @@ void find_optimal_rotation(
     std::cout << " " << _T(i, 0);
     std::cout << std::endl;
   }
+  std::cout << "====================\n";
 }
 
 TEST_CASE("basic_00", "[RotationOptimization]")

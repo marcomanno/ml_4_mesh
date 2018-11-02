@@ -445,3 +445,24 @@ TEST_CASE("flat_sp2_a01", "[Flattening2SP]")
   flatten(body, false);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbbb01.obj", body);
 }
+
+TEST_CASE("flat_sp2_a02", "[Flattening2SP]")
+{
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaaa02.obj");
+  flatten(body, false);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbbb02.obj", body);
+}
+
+TEST_CASE("flat_sp2_a03", "[Flattening2SP]")
+{
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaaa03.obj");
+  flatten(body, false);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbbb03.obj", body);
+}
+
+TEST_CASE("flat_sp2_a04", "[Flattening2SP]")
+{
+  auto body = IO::load_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/aaaa04.obj");
+  flatten(body, false);
+  IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbbb04.obj", body);
+}
