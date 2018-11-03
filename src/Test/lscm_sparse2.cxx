@@ -75,8 +75,8 @@ struct EnergyFunction : LM::IMultiFunction
     }
     m2_ = 2 * tri_nmbr_;
     m3_ = 3 * tri_nmbr_;
-    n2_ = n_ - 4;
-    n3_ = n_ - 3;
+    n2_ = 2 * n_ - 4;
+    n3_ = 2 * n_ - 3;
   }
 
   bool evaluate(const LM::ColumnVector& _x, LM::ColumnVector& _f) const override
