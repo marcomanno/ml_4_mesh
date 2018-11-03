@@ -107,7 +107,8 @@ SparseLM::Stop SparseLM::compute_internal(ColumnVector& _x, MKL_INT _max_iterati
 
       if (dp_L2 * SPLM_EPSILON_SQ >= (p_L2 + eps2))
         return Stop::SINGULAR; // almost singular
-      auto pdx = _x + dx;
+      auto pdx = _x;
+      pdx.topRows(n_) += dx;
       fun_.evaluate(pdx, f_val);
       auto pdp_eL2 = f_val.squaredNorm();
       std::cout << std::setprecision(17) << "Err=" << pdp_eL2 << std::endl;

@@ -48,14 +48,14 @@ struct EnergyFunction : LM::IMultiFunction
   struct DataOfFace
   {
     Geo::VectorD2 loc_tri_[2];
-    size_t idx_[3];
+    MKL_INT idx_[3];
     double area_sqrt_;
   };
 
-  EnergyFunction(const VertexIndMpap& _vrt_inds,
-    Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE>& _bf, int _m, int _n) :
-    n_(_n), m_(_m), vrt_inds_(_vrt_inds)
+  EnergyFunction(Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE>& _bf):
+    tri_nmbr_(_bf.size()), n_(0)
   {
+    VertexIndMpap vrt_inds;
     for (auto face : _bf)
     {
       auto& fd = data_of_faces_.emplace_back();
@@ -66,10 +66,17 @@ struct EnergyFunction : LM::IMultiFunction
       for (auto v : fv)
       {
         v->geom(pts[i]);
-        fd.idx_[i++] = 2 * vrt_inds_.find(v)->second;
+        auto pos_it = vrt_inds.emplace(v, n_);
+        fd.idx_[i++] = 2 * pos_it.first->second;
+        if (pos_it.second)
+          ++n_;
       }
       fd.area_sqrt_ = sqrt(move_to_local_coord(pts, fd.loc_tri_) * 0.5);
     }
+    m2_ = 2 * tri_nmbr_;
+    m3_ = 3 * tri_nmbr_;
+    n2_ = n_ - 4;
+    n3_ = n_ - 3;
   }
 
   bool evaluate(const LM::ColumnVector& _x, LM::ColumnVector& _f) const override
@@ -80,48 +87,48 @@ struct EnergyFunction : LM::IMultiFunction
   {
     return compute(_x, nullptr, &_fj);
   }
+  bool jacobian_conformal(
+    const LM::ColumnVector& _x, LM::Matrix& _fj) const
+  {
+    return compute<false>(_x, nullptr, &_fj);
+  }
   MKL_INT rows() const override
   {
-    return m_;
+    return m3_;
   }
   MKL_INT cols() const override
   {
-    return n_;
+    return n3_;
   }
 
-
 protected:
-  const VertexIndMpap& vrt_inds_;
   std::vector<DataOfFace> data_of_faces_;
-  int m_, n_;
+  MKL_INT tri_nmbr_, n_;
+  MKL_INT m2_, m3_;
+  MKL_INT n2_, n3_;
 
+  template <bool fullT = true>
   int compute(const LM::ColumnVector& _x,
     LM::ColumnVector* _fvec, LM::Matrix* _fjac) const;
 };
 
+template <bool fullT>
 int EnergyFunction::compute(const Eigen::VectorXd& _x,
   LM::ColumnVector* _fvec, LM::Matrix* _fjac) const
 {
   std::vector<Eigen::Triplet<double>> triplets;
 
-  auto X = [this, &_x](int _i)
-  {
-    if (_i < n_)
-      return _x[_i];
-    else
-      return 0.;
-  };
-
-  size_t i_eq_loop = 0;
+  MKL_INT i_eq_loop = 0;
   for (auto& fd : data_of_faces_)
   {
     // 3 equations per face.
-    size_t i_eq = i_eq_loop;
-    i_eq_loop += 3;
-    auto u10 = X(fd.idx_[1]) - X(fd.idx_[0]);
-    auto u20 = X(fd.idx_[2]) - X(fd.idx_[0]);
-    auto v10 = X(fd.idx_[1] + 1) - X(fd.idx_[0] + 1);
-    auto v20 = X(fd.idx_[2] + 1) - X(fd.idx_[0] + 1);
+    MKL_INT i_eq = i_eq_loop;
+    const MKL_INT rows_per_face = 2 + fullT;
+    i_eq_loop += rows_per_face;
+    auto u10 = _x(fd.idx_[1]) - _x(fd.idx_[0]);
+    auto u20 = _x(fd.idx_[2]) - _x(fd.idx_[0]);
+    auto v10 = _x(fd.idx_[1] + 1) - _x(fd.idx_[0] + 1);
+    auto v20 = _x(fd.idx_[2] + 1) - _x(fd.idx_[0] + 1);
     double a = u10 / fd.loc_tri_[0][0];
     double b = (u20 - fd.loc_tri_[1][0] * u10 / fd.loc_tri_[0][0]) / fd.loc_tri_[1][1];
     double c = v10 / fd.loc_tri_[0][0];
@@ -131,35 +138,42 @@ int EnergyFunction::compute(const Eigen::VectorXd& _x,
     {
       (*_fvec)(i_eq) = fd.area_sqrt_ * (a - d);
       (*_fvec)(i_eq + 1) = fd.area_sqrt_ * (b + c);
-      (*_fvec)(i_eq + 2) = fd.area_sqrt_ * (std::log(det));
+      if constexpr(fullT)
+        (*_fvec)(i_eq + 2) = fd.area_sqrt_ * (std::log(det));
     }
     if (_fjac == nullptr)
       continue;
-    Eigen::Matrix<double, 3, 4> dfa;
-    dfa << 1, 0, 0, -1,
-      0, 1, 1, 0,
-      d / det, -c / det, -b / det, a / det;
+    Eigen::Matrix<double, rows_per_face, 4> dfa;
+    if constexpr (fullT)
+      dfa << 1, 0, 0, -1,
+             0, 1, 1, 0,
+             d / det, -c / det, -b / det, a / det;
+    else
+      dfa << 1, 0, 0, -1,
+             0, 1, 1,  0;
 
-    Eigen::Matrix<double, 4, 6> da_uv;
     auto c0 = 1. / fd.loc_tri_[0][0]; // 1 / x_1
     auto c1 = 1. / fd.loc_tri_[1][1]; // 1 / y_2
     auto c2 = fd.loc_tri_[1][0] / (fd.loc_tri_[0][0] * fd.loc_tri_[1][1]); // x_2 / (x_1 * y_2)
+    Eigen::Matrix<double, 4, 6> da_uv;
     da_uv <<
-      -c0, 0, c0, 0, 0, 0,
-      c2 - c1, 0, -c2, 0, c1, 0,
-      0, -c0, 0, c0, 0, 0,
-      0, c2 - c1, 0, -c2, 0, c1;
-    Eigen::Matrix<double, 3, 6> df_uv = fd.area_sqrt_ * dfa * da_uv;
-    for (size_t i = 0; i < 3; ++i)
+           -c0,        0,  c0,   0,  0,  0,
+       c2 - c1,        0, -c2,   0, c1,  0,
+             0,      -c0,   0,  c0,  0,  0,
+             0,  c2 - c1,   0, -c2,  0, c1;
+    Eigen::Matrix<double, rows_per_face, 6> df_uv = fd.area_sqrt_ * dfa * da_uv;
+    for (MKL_INT i = 0; i < rows_per_face; ++i)
     {
-      for (size_t j = 0; j < 6; ++j)
+      for (MKL_INT j = 0; j < 6; ++j)
       {
         auto val = df_uv(i, j);
         if (val != 0)
         {
           auto c = fd.idx_[j / 2] + j % 2;
-          if (c < n_)
-            triplets.emplace_back(i_eq + i, c, val);
+          if (c < n3_)
+            triplets.emplace_back(
+              static_cast<int>(i_eq + i),
+              static_cast<int>(c), val);
         }
       }
     }
@@ -267,16 +281,9 @@ static void flatten(Topo::Wrap<Topo::Type::BODY> _body, bool _consformal)
 
   if (!_consformal)
   {
-    auto unk_nmbr = cols - 3;
-    auto eq_nmbr = 3 * bf.size();
-    X.conservativeResize(unk_nmbr);
-    EnergyFunction ef(vrt_inds, bf, eq_nmbr, unk_nmbr);
+    EnergyFunction ef(bf);
     auto solver = LM::ISparseLM::make(ef);
     solver->compute(X, 300);
-
-    X.conservativeResize(cols);
-    X(cols - 1) = X(cols - 2) = X(cols - 3) = 0;
-
     auto a1 = area(bf, vertex_flat_point);
     X *= sqrt(a0 / a1);
   }
