@@ -55,7 +55,6 @@ struct EnergyFunction : LM::IMultiFunction
   EnergyFunction(Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE>& _bf):
     tri_nmbr_(_bf.size()), n_(0)
   {
-    VertexIndMpap vrt_inds;
     for (auto face : _bf)
     {
       auto& fd = data_of_faces_.emplace_back();
@@ -66,7 +65,7 @@ struct EnergyFunction : LM::IMultiFunction
       for (auto v : fv)
       {
         v->geom(pts[i]);
-        auto pos_it = vrt_inds.emplace(v, n_);
+        auto pos_it = vrt_inds_.emplace(v, n_);
         fd.idx_[i++] = 2 * pos_it.first->second;
         if (pos_it.second)
           ++n_;
@@ -75,7 +74,6 @@ struct EnergyFunction : LM::IMultiFunction
     }
     m2_ = 2 * tri_nmbr_;
     m3_ = 3 * tri_nmbr_;
-    n2_ = 2 * n_ - 4;
     n3_ = 2 * n_ - 3;
   }
 
@@ -87,11 +85,8 @@ struct EnergyFunction : LM::IMultiFunction
   {
     return compute(_x, nullptr, &_fj);
   }
-  bool jacobian_conformal(
-    const LM::ColumnVector& _x, LM::Matrix& _fj) const
-  {
-    return compute<false>(_x, nullptr, &_fj);
-  }
+  void jacobian_conformal(LM::Matrix& _fj) const;
+
   MKL_INT rows() const override
   {
     return m3_;
@@ -101,29 +96,32 @@ struct EnergyFunction : LM::IMultiFunction
     return n3_;
   }
 
+  const VertexIndMpap& veterx_map() const
+  {
+    return vrt_inds_;
+  }
+
 protected:
   std::vector<DataOfFace> data_of_faces_;
   MKL_INT tri_nmbr_, n_;
   MKL_INT m2_, m3_;
-  MKL_INT n2_, n3_;
+  MKL_INT n3_;
+  VertexIndMpap vrt_inds_;
 
-  template <bool fullT = true>
   int compute(const LM::ColumnVector& _x,
     LM::ColumnVector* _fvec, LM::Matrix* _fjac) const;
 };
 
-template <bool fullT>
 int EnergyFunction::compute(const Eigen::VectorXd& _x,
   LM::ColumnVector* _fvec, LM::Matrix* _fjac) const
 {
   std::vector<Eigen::Triplet<double>> triplets;
-
   MKL_INT i_eq_loop = 0;
   for (auto& fd : data_of_faces_)
   {
     // 3 equations per face.
     MKL_INT i_eq = i_eq_loop;
-    const MKL_INT rows_per_face = 2 + fullT;
+    const MKL_INT rows_per_face = 3;
     i_eq_loop += rows_per_face;
     auto u10 = _x(fd.idx_[1]) - _x(fd.idx_[0]);
     auto u20 = _x(fd.idx_[2]) - _x(fd.idx_[0]);
@@ -138,19 +136,14 @@ int EnergyFunction::compute(const Eigen::VectorXd& _x,
     {
       (*_fvec)(i_eq) = fd.area_sqrt_ * (a - d);
       (*_fvec)(i_eq + 1) = fd.area_sqrt_ * (b + c);
-      if constexpr(fullT)
-        (*_fvec)(i_eq + 2) = fd.area_sqrt_ * (std::log(det));
+      (*_fvec)(i_eq + 2) = fd.area_sqrt_ * (std::log(det));
     }
     if (_fjac == nullptr)
       continue;
     Eigen::Matrix<double, rows_per_face, 4> dfa;
-    if constexpr (fullT)
-      dfa << 1, 0, 0, -1,
-             0, 1, 1, 0,
-             d / det, -c / det, -b / det, a / det;
-    else
-      dfa << 1, 0, 0, -1,
-             0, 1, 1,  0;
+    dfa << 1, 0, 0, -1,
+            0, 1, 1,  0,
+            d / det, -c / det, -b / det, a / det;
 
     auto c0 = 1. / fd.loc_tri_[0][0]; // 1 / x_1
     auto c1 = 1. / fd.loc_tri_[1][1]; // 1 / y_2
@@ -170,7 +163,7 @@ int EnergyFunction::compute(const Eigen::VectorXd& _x,
         if (val != 0)
         {
           auto c = fd.idx_[j / 2] + j % 2;
-          if (c < n3_)
+          if (c < _fjac->cols())
             triplets.emplace_back(
               static_cast<int>(i_eq + i),
               static_cast<int>(c), val);
@@ -184,6 +177,49 @@ int EnergyFunction::compute(const Eigen::VectorXd& _x,
   return 0;
 }
 
+void EnergyFunction::jacobian_conformal(LM::Matrix& _fj) const
+{
+  _fj.resize(m2_, 2 * n_);
+  std::vector<Eigen::Triplet<double>> triplets;
+  MKL_INT i_eq_loop = 0;
+  Eigen::Matrix<double, 2, 4> dfa;
+  dfa << 1, 0, 0, -1, 0, 1, 1, 0;
+  for (auto& fd : data_of_faces_)
+  {
+    // 3 equations per face.
+    MKL_INT i_eq = i_eq_loop;
+    i_eq_loop += 2;
+
+    auto c0 = 1. / fd.loc_tri_[0][0]; // 1 / x_1
+    auto c1 = 1. / fd.loc_tri_[1][1]; // 1 / y_2
+    auto c2 = fd.loc_tri_[1][0] / (fd.loc_tri_[0][0] * fd.loc_tri_[1][1]); // x_2 / (x_1 * y_2)
+    Eigen::Matrix<double, 4, 6> da_uv;
+    da_uv <<
+           -c0,       0,  c0,   0,  0,  0,
+       c2 - c1,       0, -c2,   0, c1,  0,
+             0,     -c0,   0,  c0,  0,  0,
+             0, c2 - c1,   0, -c2,  0, c1;
+
+    Eigen::Matrix<double, 2, 6> df_uv = fd.area_sqrt_ * dfa * da_uv;
+    for (MKL_INT i = 0; i < 2; ++i)
+    {
+      for (MKL_INT j = 0; j < 6; ++j)
+      {
+        auto val = df_uv(i, j);
+        if (val != 0)
+        {
+          auto c = fd.idx_[j / 2] + j % 2;
+          triplets.emplace_back(
+            static_cast<int>(i_eq + i),
+            static_cast<int>(c), val);
+        }
+      }
+    }
+  }
+  _fj.setFromTriplets(triplets.begin(), triplets.end());
+}
+
+
 static void flatten(Topo::Wrap<Topo::Type::BODY> _body, bool _consformal)
 {
   Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE> bf(_body);
@@ -196,51 +232,14 @@ static void flatten(Topo::Wrap<Topo::Type::BODY> _body, bool _consformal)
 
   auto a0 = area(bf, vertex_point);
 
-  std::map<Topo::Wrap<Topo::Type::VERTEX>, size_t> vrt_inds;
-  using Triplet = Eigen::Triplet<double, size_t>;
-  using Matrix = Eigen::SparseMatrix<double>;
-  std::vector<Triplet> coffs;
-  size_t rows = 0, pt_nmbr = 0;
-  for (auto face : bf)
-  {
-    std::array<Geo::VectorD2, 3> w;
-    Topo::Iterator<Topo::Type::FACE, Topo::Type::VERTEX> fv(face);
-    Geo::VectorD3 pts[3];
-    size_t idx[3];
-    size_t i = 0;
+  EnergyFunction ef(bf);
+  LM::Matrix M;
+  ef.jacobian_conformal(M);
 
-    for (auto v : fv)
-    {
-      v->geom(pts[i]);
-      auto pos = vrt_inds.emplace(v, pt_nmbr);
-      idx[i] = pos.first->second;
-      if (pos.second)
-        ++pt_nmbr;
-      ++i;
-    }
-    Geo::VectorD2 loc_tri[2];
-    auto area_time_2_sqrt = sqrt(move_to_local_coord(pts, loc_tri));
-    w[0] = (loc_tri[1] - loc_tri[0]) / area_time_2_sqrt;
-    w[1] = -loc_tri[1] / area_time_2_sqrt;
-    w[2] = loc_tri[0] / area_time_2_sqrt;
-
-    for (size_t j = 0; j < 3; ++j)
-    {
-      auto idx_base = idx[j] * 2;
-      coffs.emplace_back(rows, idx_base, w[j][0]);
-      coffs.emplace_back(rows, idx_base + 1, -w[j][1]);
-      coffs.emplace_back(rows + 1, idx_base, w[j][1]);
-      coffs.emplace_back(rows + 1, idx_base + 1, w[j][0]);
-    }
-    rows += 2;
-  }
-  const auto cols = 2 * pt_nmbr;
-  LM::Matrix M(rows, cols);
-  M.setFromTriplets(coffs.begin(), coffs.end());
   const auto FIXED_VAR = 4;
-  auto split_idx = cols - FIXED_VAR;
-  auto A = M.block(0, 0, rows, split_idx);
-  auto B = M.block(0, split_idx, rows, FIXED_VAR);
+  auto split_idx = M.cols() - FIXED_VAR;
+  auto A = M.block(0, 0, M.rows(), split_idx);
+  auto B = M.block(0, split_idx, M.rows(), FIXED_VAR);
   Eigen::Vector4d fixed;
   fixed(0) = -100;
   fixed(1) = fixed(2) = fixed(3) = 0;
@@ -257,9 +256,11 @@ static void flatten(Topo::Wrap<Topo::Type::BODY> _body, bool _consformal)
   Eigen::VectorXd rhs = A.transpose() * b;
   Eigen::VectorXd X = lsolver.solve(rhs);
 #endif
-  X.conservativeResize(cols);
+  X.conservativeResize(M.cols());
   for (size_t i = 0; i < 4; ++i)
     X(split_idx + i, 0) = -fixed(i, 0);
+
+  auto& vrt_inds = ef.veterx_map();
 
   auto set_x = [&](const double* _x)
   {
@@ -273,7 +274,10 @@ static void flatten(Topo::Wrap<Topo::Type::BODY> _body, bool _consformal)
   };
   auto vertex_flat_point = [&X, &vrt_inds](const Topo::Wrap<Topo::Type::VERTEX>& _v)
   {
-    auto ind = vrt_inds[_v];
+    auto it = vrt_inds.find(_v);
+    if (it == vrt_inds.end())
+      throw "Vertex veraible not found";
+    auto ind = vrt_inds.find(_v)->second;
     return Geo::Point{ X(2 * ind), X(2 * ind + 1), 0 };
   };
   auto a1 = area(bf, vertex_flat_point);
@@ -281,7 +285,6 @@ static void flatten(Topo::Wrap<Topo::Type::BODY> _body, bool _consformal)
 
   if (!_consformal)
   {
-    EnergyFunction ef(bf);
     auto solver = LM::ISparseLM::make(ef);
     solver->compute(X, 300);
     auto a1 = area(bf, vertex_flat_point);
