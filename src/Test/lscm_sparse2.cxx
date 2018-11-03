@@ -50,6 +50,23 @@ struct EnergyFunction : LM::IMultiFunction
     Geo::VectorD2 loc_tri_[2];
     MKL_INT idx_[3];
     double area_sqrt_;
+    double c0_, c1_, c2_;
+    void compute_coeff(double _area_sqrt)
+    {
+      area_sqrt_ = _area_sqrt;
+      c0_ = _area_sqrt / loc_tri_[0][0]; // 1 / x_1
+      c1_ = _area_sqrt / loc_tri_[1][1]; // 1 / y_2
+      c2_ = _area_sqrt * loc_tri_[1][0] / (loc_tri_[0][0] * loc_tri_[1][1]); // x_2 / (x_1 * y_2)
+    }
+    void fill_matrix(Eigen::Matrix<double, 4, 6>& _da_uv) const
+    {
+      _da_uv <<
+             -c0_,         0,  c0_,    0,   0,   0,
+        c2_ - c1_,         0, -c2_,    0, c1_,   0,
+                0,      -c0_,    0,  c0_,   0,   0,
+                0, c2_ - c1_,    0, -c2_,   0, c1_;
+
+    }
   };
 
   EnergyFunction(Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE>& _bf):
@@ -70,7 +87,7 @@ struct EnergyFunction : LM::IMultiFunction
         if (pos_it.second)
           ++n_;
       }
-      fd.area_sqrt_ = sqrt(move_to_local_coord(pts, fd.loc_tri_) * 0.5);
+      fd.compute_coeff(sqrt(move_to_local_coord(pts, fd.loc_tri_) * 0.5));
     }
     m2_ = 2 * tri_nmbr_;
     m3_ = 3 * tri_nmbr_;
@@ -116,12 +133,14 @@ int EnergyFunction::compute(const Eigen::VectorXd& _x,
   LM::ColumnVector* _fvec, LM::Matrix* _fjac) const
 {
   std::vector<Eigen::Triplet<double>> triplets;
+  Eigen::Matrix<double, 4, 6> da_uv;
   MKL_INT i_eq_loop = 0;
+  const MKL_INT rows_per_face = 3;
+  Eigen::Matrix<double, rows_per_face, 4> dfa;
   for (auto& fd : data_of_faces_)
   {
     // 3 equations per face.
     MKL_INT i_eq = i_eq_loop;
-    const MKL_INT rows_per_face = 3;
     i_eq_loop += rows_per_face;
     auto u10 = _x(fd.idx_[1]) - _x(fd.idx_[0]);
     auto u20 = _x(fd.idx_[2]) - _x(fd.idx_[0]);
@@ -140,21 +159,15 @@ int EnergyFunction::compute(const Eigen::VectorXd& _x,
     }
     if (_fjac == nullptr)
       continue;
-    Eigen::Matrix<double, rows_per_face, 4> dfa;
     dfa << 1, 0, 0, -1,
-            0, 1, 1,  0,
-            d / det, -c / det, -b / det, a / det;
+           0, 1, 1,  0,
+           d / det, -c / det, -b / det, a / det;
 
     auto c0 = 1. / fd.loc_tri_[0][0]; // 1 / x_1
     auto c1 = 1. / fd.loc_tri_[1][1]; // 1 / y_2
     auto c2 = fd.loc_tri_[1][0] / (fd.loc_tri_[0][0] * fd.loc_tri_[1][1]); // x_2 / (x_1 * y_2)
-    Eigen::Matrix<double, 4, 6> da_uv;
-    da_uv <<
-           -c0,        0,  c0,   0,  0,  0,
-       c2 - c1,        0, -c2,   0, c1,  0,
-             0,      -c0,   0,  c0,  0,  0,
-             0,  c2 - c1,   0, -c2,  0, c1;
-    Eigen::Matrix<double, rows_per_face, 6> df_uv = fd.area_sqrt_ * dfa * da_uv;
+    fd.fill_matrix(da_uv);
+    Eigen::Matrix<double, rows_per_face, 6> df_uv = dfa * da_uv;
     for (MKL_INT i = 0; i < rows_per_face; ++i)
     {
       for (MKL_INT j = 0; j < 6; ++j)
@@ -184,23 +197,14 @@ void EnergyFunction::jacobian_conformal(LM::Matrix& _fj) const
   MKL_INT i_eq_loop = 0;
   Eigen::Matrix<double, 2, 4> dfa;
   dfa << 1, 0, 0, -1, 0, 1, 1, 0;
+  Eigen::Matrix<double, 4, 6> da_uv;
   for (auto& fd : data_of_faces_)
   {
     // 3 equations per face.
     MKL_INT i_eq = i_eq_loop;
     i_eq_loop += 2;
-
-    auto c0 = 1. / fd.loc_tri_[0][0]; // 1 / x_1
-    auto c1 = 1. / fd.loc_tri_[1][1]; // 1 / y_2
-    auto c2 = fd.loc_tri_[1][0] / (fd.loc_tri_[0][0] * fd.loc_tri_[1][1]); // x_2 / (x_1 * y_2)
-    Eigen::Matrix<double, 4, 6> da_uv;
-    da_uv <<
-           -c0,       0,  c0,   0,  0,  0,
-       c2 - c1,       0, -c2,   0, c1,  0,
-             0,     -c0,   0,  c0,  0,  0,
-             0, c2 - c1,   0, -c2,  0, c1;
-
-    Eigen::Matrix<double, 2, 6> df_uv = fd.area_sqrt_ * dfa * da_uv;
+    fd.fill_matrix(da_uv);
+    Eigen::Matrix<double, 2, 6> df_uv = dfa * da_uv;
     for (MKL_INT i = 0; i < 2; ++i)
     {
       for (MKL_INT j = 0; j < 6; ++j)
