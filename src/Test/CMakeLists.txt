@@ -33,7 +33,7 @@ target_compile_options(${project_name}  PRIVATE /W3 /WX- /DMKL_ILP64 /Oi)
 
 target_link_libraries(${project_name}
   "${CMAKE_CURRENT_SOURCE_DIR}/../tensorflow/lib/tensorflow.lib"
-  Import Topology Geo PolygonTriangularization splm splm_lib ${MKL_LIBS})
+  Import Topology Geo PolygonTriangularization splm_lib ${MKL_LIBS})
 
 
 add_definitions(-DOUTDIR="${CMAKE_SOURCE_DIR}/../out")
