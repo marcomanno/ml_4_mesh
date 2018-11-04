@@ -2,8 +2,6 @@
 //
 #pragma optimize ("", off)
 
-#include "aa.hxx"
-
 #include "MeshSegmentation/mesh_training.hxx"
 
 #include "tensorflow/core/framework/types.h"
