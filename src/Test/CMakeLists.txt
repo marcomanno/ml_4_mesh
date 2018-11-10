@@ -17,7 +17,7 @@ file(GLOB CXX_FILES ${CMAKE_CURRENT_SOURCE_DIR} "*.cxx")
 add_executable(${project_name} ${CXX_FILES} ${HXX_FILES})
 target_link_libraries(${project_name} 
   "${CMAKE_CURRENT_SOURCE_DIR}/../tensorflow/lib/tensorflow.lib"
-  Import Topology Geo PolygonTriangularization)
+  Import Topology Geo PolygonTriangularization flatten)
 target_include_directories(${project_name}
   PUBLIC ${CMAKE_SOURCE_DIR}/tensorflow/include
   PUBLIC ${CMAKE_SOURCE_DIR}/CppNumericalSolvers/include
@@ -36,7 +36,7 @@ target_link_libraries(${project_name}
   Import Topology Geo PolygonTriangularization splm_lib ${MKL_LIBS})
 
 
-add_definitions(-DOUTDIR="${CMAKE_SOURCE_DIR}/../out")
+add_definitions(-DOUTDIR="${CMAKE_SOURCE_DIR}/../out/TestData")
 add_definitions(-DINDIR="${CMAKE_SOURCE_DIR}/Test/Data")
 
 # TODO: Add tests and install targets if needed.

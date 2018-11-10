@@ -40,6 +40,7 @@ set (MKL_LIBS "${MKL_LIB_DIR}/mkl_intel_ilp64.lib"
 
 # Include sub-projects.
 #add_subdirectory(tensorflow)
+add_subdirectory(flatten)
 add_subdirectory(Utils)
 add_subdirectory(Import)
 add_subdirectory(Topology)
