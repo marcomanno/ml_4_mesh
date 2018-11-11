@@ -72,14 +72,19 @@ void EnergyFunction::init(
     }
     fd.compute_coeff(sqrt(move_to_local_coord(pts, fd.loc_tri_) * 0.5));
   }
-  const auto vert_nmbr = n_ + (++fixed_nmbr_);
+  fixed_nmbr_ = -fixed_nmbr_ - 1;
+  const auto vert_nmbr = n_ + fixed_nmbr_;
   for (auto& vind : vrt_inds_)
-  {
     if (vind.second < 0)
       vind.second += vert_nmbr;
-  }
+
+  for (auto& fdit : data_of_faces_)
+    for (auto& id : fdit.idx_)
+      if (id < 0) id += 2 * vert_nmbr;
+
   m2_ = 2 * tri_nmbr_;
   m3_ = 3 * tri_nmbr_;
+  n2_ = 2 * (n_ + fixed_nmbr_);
 }
 
 MKL_INT EnergyFunction::compute_unkown_nmbr(bool _apply_constraints)
@@ -87,14 +92,12 @@ MKL_INT EnergyFunction::compute_unkown_nmbr(bool _apply_constraints)
   if (_apply_constraints)
   {
     n3_ = 2 * n_;
-    n_ += fixed_nmbr_;
     return n3_;
   }
   else
   {
-    n_ += fixed_nmbr_;
-    n3_ = 2 * n_ - 3;
-    return 2 * n_ - 4;
+    n3_ = 2 * (n_ + fixed_nmbr_) - 3;
+    return 2 * (n_ + fixed_nmbr_) - 4;
   }
 }
 
@@ -118,7 +121,7 @@ MKL_INT EnergyFunction::cols() const
 }
 void EnergyFunction::jacobian_conformal(LM::Matrix& _fj) const
 {
-  _fj.resize(m2_, 2 * n_);
+  _fj.resize(m2_, n2_);
   std::vector<Eigen::Triplet<double>> triplets;
   MKL_INT i_eq_loop = 0;
   Eigen::Matrix<double, 2, 4> dfa;

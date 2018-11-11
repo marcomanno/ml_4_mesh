@@ -19,7 +19,7 @@ constr_function empty_constr_function = [](Topo::Wrap<Topo::Type::BODY>)
 };
 
 static void flatten_complete(const char* file, bool _conformal,
-  constr_function& _constr_func = empty_constr_function)
+  const constr_function& _constr_func = empty_constr_function)
 {
   namespace fs = std::filesystem;
   fs::path out_dir(OUTDIR);
@@ -44,7 +44,23 @@ static void flatten_complete(const char* file, bool _conformal,
 
 TEST_CASE("my_flat_00", "[FlatteningFinal]")
 {
-  flatten_complete("aaa0.obj", false);
+  constr_function a_constr_function = [](Topo::Wrap<Topo::Type::BODY> _body)
+  {
+    std::vector<std::vector<MeshOp::FixedPositions>> constraints(1);
+    Topo::Iterator<Topo::Type::BODY, Topo::Type::VERTEX> bv_it(_body);
+    Geo::VectorD2 p_uv{ 0 };
+    for (auto v : bv_it)
+    {
+      Geo::Point pt;
+      v->geom(pt);
+      if (fabs(pt[0] - 30) > 0.1 || fabs(pt[2] + 25) > 0.1)
+        continue;
+      constraints[0].push_back({v, p_uv});
+      p_uv[0] += 25;
+    }
+    return constraints;
+  };
+  flatten_complete("aaa0.obj", false, a_constr_function);
 }
 
 TEST_CASE("my_flat_00_conf", "[FlatteningFinal]")
@@ -74,19 +90,53 @@ TEST_CASE("my_flat_01_constr", "[FlatteningFinal]")
         pt_min = pt;
       }
     }
-    std::vector<Topo::Wrap<Topo::Type::VERTEX>> seq;
-    for (seq.push_back(vmin);;)
+    std::vector<Topo::Wrap<Topo::Type::VERTEX>> seq{vmin};
+    for (bool new_vert = true; new_vert;)
     {
+      new_vert = false;
       Topo::Iterator<Topo::Type::VERTEX, Topo::Type::EDGE> ve_it(seq.back());
       for (auto e : ve_it)
       {
-        e;
+        Topo::Wrap<Topo::Type::VERTEX> oth_v;
+        Topo::Iterator<Topo::Type::EDGE, Topo::Type::VERTEX> ev_it(e);
+        for (auto v : ev_it)
+        {
+          if (v != seq.back())
+          {
+            oth_v = v;
+            break;
+          }
+        }
+        if (seq.size() > 1 && seq[seq.size() - 2] == oth_v)
+          continue;
+        Geo::Point pt;
+        oth_v->geom(pt);
+        if (pt[2] < 1e-5)
+        {
+        seq.push_back(oth_v);
+        new_vert = true;
+        break;
+        }
       }
-
     }
-    return std::vector<std::vector<MeshOp::FixedPositions>>();
+    std::vector<std::vector<MeshOp::FixedPositions>> constraints(1);
+    Geo::VectorD2 p_uv{ 0 };
+    bool first = true;
+    Geo::Point pt_prev;
+    for (auto v : seq)
+    {
+      Geo::Point pt;
+      v->geom(pt);
+      if (first)
+        first = false;
+      else
+        p_uv[0] += Geo::length(pt - pt_prev);
+      pt_prev = pt;
+      constraints[0].push_back({ v, p_uv });
+    }
+    return constraints;
   };
-  flatten_complete("aaa1.obj", false);
+  flatten_complete("aaa1.obj", false, a_constr_function);
 }
 
 TEST_CASE("my_flat_01_conf", "[FlatteningFinal]")

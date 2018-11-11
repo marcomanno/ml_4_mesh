@@ -65,7 +65,7 @@ struct ComputeData
 
   const Eigen::VectorXd& X() const { return X_; }
 
-  MKL_INT constrain_number() const { return ef_.constrain_number(); }
+  MKL_INT constrain_vertices() const { return ef_.constrain_vertices(); }
 
 private:
   EnergyFunction ef_;
@@ -178,7 +178,7 @@ void Flatten::compute(bool _conformal)
   ComputeData cmp_data(bf, mvp);
   cmp_data.compute(_conformal, false);
 
-  if (cmp_data.constrain_number() > 3)
+  if (cmp_data.constrain_vertices() > 1)
   {
 
     cmp_data.compute(_conformal, true);

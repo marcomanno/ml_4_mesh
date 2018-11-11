@@ -35,14 +35,14 @@ struct EnergyFunction : LM::IMultiFunction
 
   const VertexIndMpap& veterx_map() const { return vrt_inds_; }
 
-  MKL_INT constrain_number() const { return fixed_nmbr_; }
+  MKL_INT constrain_vertices() const { return fixed_nmbr_; }
 
 protected:
   std::vector<DataOfFace> data_of_faces_;
   MKL_INT tri_nmbr_, n_;
   MKL_INT fixed_nmbr_;
   MKL_INT m2_, m3_;
-  MKL_INT n3_;
+  MKL_INT n2_, n3_;
   VertexIndMpap vrt_inds_;
 
   int compute(const LM::ColumnVector& _x,
