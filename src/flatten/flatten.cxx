@@ -43,9 +43,6 @@ struct Flatten : public IFlatten
 private:
   Topo::Wrap<Topo::Type::BODY> body_;
   std::vector<std::vector<FixedPositions>> fixed_pos_groups_;
-
-  void compute_internal(
-    bool _conformal, EnergyFunction& _ef, bool _apply_constraints);
 };
 
 std::unique_ptr<IFlatten> IFlatten::make()
@@ -57,40 +54,16 @@ namespace {
 struct ComputeData
 {
   ComputeData(const Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE>& _bf,
-    MapVertPos& _mvp) : bf_(_bf)
-  {
-  auto vertex_point = [](const Topo::Wrap<Topo::Type::VERTEX>& _v)
-  {
-    Geo::Point pt;
-    _v->geom(pt);
-    return pt;
-  };
-  area0_ = area(bf_, vertex_point);
-  ef_.init(bf_, _mvp);
-  }
+    MapVertPos& _mvp);
+
+  void set_vertex_position(
+    Topo::Wrap<Topo::Type::VERTEX>& _vert, const Geo::VectorD2& _uv);
 
   void compute(bool _conformal, bool _apply_constraints);
 
-  void apply_result()
-  {
-    auto& vrt_inds = ef_.veterx_map();
-    auto set_x = [&vrt_inds](const double* _x)
-    {
-      for (const auto& v_id : vrt_inds)
-      {
-        auto base_ind = 2 * v_id.second;
-        Geo::VectorD3 pt;
-        pt = { _x[base_ind], _x[base_ind + 1], 0 };
-        const_cast<Topo::Wrap<Topo::Type::VERTEX>&>(v_id.first)->set_geom(pt);
-      }
-    };
-    set_x(X_.data());
-  }
+  void apply_result();
 
-  Eigen::VectorXd& X()
-  {
-    return X_;
-  }
+  const Eigen::VectorXd& X() const { return X_; }
 
   MKL_INT constrain_number() const { return ef_.constrain_number(); }
 
@@ -100,6 +73,41 @@ private:
   double area0_;
   const Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE>& bf_;
 };
+
+ComputeData::ComputeData(const Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE>& _bf,
+  MapVertPos& _mvp) : bf_(_bf)
+{
+  auto vertex_point = [](const Topo::Wrap<Topo::Type::VERTEX>& _v)
+  {
+    Geo::Point pt;
+    _v->geom(pt);
+    return pt;
+  };
+  area0_ = area(bf_, vertex_point);
+  ef_.init(bf_, _mvp);
+}
+
+void ComputeData::set_vertex_position(
+  Topo::Wrap<Topo::Type::VERTEX>& _vert, const Geo::VectorD2& _uv)
+{
+  auto vert_it = ef_.veterx_map().find(_vert);
+  if (vert_it == ef_.veterx_map().end())
+    throw "Vertex not found";
+  X_(2 * vert_it->second) = _uv[0];
+  X_(2 * vert_it->second + 1) = _uv[1];
+}
+
+void ComputeData::apply_result()
+{
+  for (const auto& v_id : ef_.veterx_map())
+  {
+    auto base_ind = 2 * v_id.second;
+    Geo::VectorD3 pt;
+    pt = { X_(base_ind), X_(base_ind + 1), 0 };
+    const_cast<Topo::Wrap<Topo::Type::VERTEX>&>(v_id.first)->set_geom(pt);
+  }
+}
+
 
 void ComputeData::compute(bool _conformal, bool _apply_constraints)
 {
@@ -111,9 +119,14 @@ void ComputeData::compute(bool _conformal, bool _apply_constraints)
   auto split_idx = unkn_nmbr;
   auto A = M.block(0, 0, M.rows(), split_idx);
   auto B = M.block(0, split_idx, M.rows(), fixed_var);
-  Eigen::Vector4d fixed;
-  fixed(0) = -100;
-  fixed(1) = fixed(2) = fixed(3) = 0;
+  Eigen::VectorXd fixed(fixed_var);
+  if (_apply_constraints)
+    fixed = X_.bottomRows(fixed_var);
+  else
+  {
+    fixed.setZero();
+    fixed[0] = -100;
+  }
 
   auto b = B * fixed;
   Eigen::PardisoLDLT<LM::Matrix> lsolver;
@@ -166,7 +179,10 @@ void Flatten::compute(bool _conformal)
   cmp_data.compute(_conformal, false);
 
   if (cmp_data.constrain_number() > 3)
+  {
+
     cmp_data.compute(_conformal, true);
+  }
   cmp_data.apply_result();
 }
 
