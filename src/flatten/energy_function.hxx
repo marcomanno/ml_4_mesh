@@ -7,6 +7,7 @@
 
 namespace MeshOp {
 
+/** Map from vertex to index in the solution array */
 using VertexIndMpap = std::map<Topo::Wrap<Topo::Type::VERTEX>, MKL_INT>;
 using MapVertPos = std::map<Topo::Wrap<Topo::Type::VERTEX>, Geo::VectorD2>;
 

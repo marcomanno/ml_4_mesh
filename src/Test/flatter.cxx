@@ -56,7 +56,7 @@ TEST_CASE("my_flat_00", "[FlatteningFinal]")
       if (fabs(pt[0] - 30) > 0.1 || fabs(pt[2] + 25) > 0.1)
         continue;
       constraints[0].push_back({v, p_uv});
-      p_uv[0] += 25;
+      p_uv[0] += 50;
     }
     return constraints;
   };

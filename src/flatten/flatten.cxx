@@ -1,4 +1,6 @@
 #include "flatten.hxx"
+#include "optimal_rotation.hxx"
+
 #include "energy_function.hxx"
 #include "Topology/iterator.hh"
 
@@ -59,6 +61,8 @@ struct ComputeData
   void set_vertex_position(
     Topo::Wrap<Topo::Type::VERTEX>& _vert, const Geo::VectorD2& _uv);
 
+  void set_constraints(std::vector<std::vector<FixedPositions>>& _constr);
+
   void compute(bool _conformal, bool _apply_constraints);
 
   void apply_result();
@@ -95,6 +99,33 @@ void ComputeData::set_vertex_position(
     throw "Vertex not found";
   X_(2 * vert_it->second) = _uv[0];
   X_(2 * vert_it->second + 1) = _uv[1];
+}
+
+void ComputeData::set_constraints(std::vector<std::vector<FixedPositions>>& _constrs)
+{
+  auto& vert_map = ef_.veterx_map();
+  for (auto& constr_set : _constrs)
+  {
+    std::vector<std::array<Geo::VectorD2, 2>> from_to_pts;
+    for (auto& constr : constr_set)
+    {
+      auto it = vert_map.find(constr.vert_);
+      if (it == vert_map.end())
+        throw "Vertex not found";
+      auto ind = 2 * it->second;
+      from_to_pts.push_back({ constr.pos_, {X_(ind), X_(ind + 1)} });
+    }
+    Eigen::Matrix2d R;
+    Eigen::Vector2d T;
+    find_optimal_rotation(from_to_pts, R, T);
+    Eigen::Vector2d x;
+    for (auto& constr : constr_set)
+    {
+      auto ind = 2 * vert_map.find(constr.vert_)->second;
+      x << constr.pos_[0], constr.pos_[1];
+      X_.segment<2>(ind) = R * x + T;
+    }
+  }
 }
 
 void ComputeData::apply_result()
@@ -147,13 +178,18 @@ void ComputeData::compute(bool _conformal, bool _apply_constraints)
     auto ind = vrt_inds.find(_v)->second;
     return Geo::Point{ X_(2 * ind), X_(2 * ind + 1), 0 };
   };
-  auto a1 = area(bf_, vertex_flat_point);
-  X_ *= sqrt(area0_ / a1);
-
-  if (!_conformal)
+  if (!_apply_constraints)
   {
-    auto solver = LM::ISparseLM::make(ef_);
-    solver->compute(X_, 300);
+    auto a1 = area(bf_, vertex_flat_point);
+    X_ *= sqrt(area0_ / a1);
+  }
+  if (_conformal)
+    return;
+
+  auto solver = LM::ISparseLM::make(ef_);
+  solver->compute(X_, 300);
+  if (!_apply_constraints)
+  {
     auto a1 = area(bf_, vertex_flat_point);
     X_ *= sqrt(area0_ / a1);
   }
@@ -180,10 +216,10 @@ void Flatten::compute(bool _conformal)
 
   if (cmp_data.constrain_vertices() > 1)
   {
-
+    cmp_data.set_constraints(fixed_pos_groups_);
     cmp_data.compute(_conformal, true);
   }
   cmp_data.apply_result();
 }
 
-} // namespace FLAT
+} // namespace MeshOp
