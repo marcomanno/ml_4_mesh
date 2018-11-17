@@ -201,8 +201,8 @@ Machine<RealT>::train(const std::vector<RealT>& _in, const std::vector<RealT>& _
   std::copy(_out.begin(), _out.end(), y_data.flat<RealT>().data());
 
   // training steps
-  for (int i = 0; i <= 500; ++i) {
-    if (i % 100 == 0)
+  for (int i = 0; i <= 1000; ++i) {
+    if (i % 1000 == 0)
     {
       std::vector<tensorflow::Tensor> outputs;
       TF_CHECK_OK(client_session_.Run({ { x_, x_data }, { *y_, y_data } }, { real_loss_ }, &outputs));

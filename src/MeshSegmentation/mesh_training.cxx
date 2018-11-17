@@ -1,4 +1,4 @@
-//#pragma optimize ("", off)
+#pragma optimize ("", off)
 #include "Import/load_obj.hh"
 #include "Topology/iterator.hh"
 
@@ -42,6 +42,18 @@ struct TrainData
 {
   std::vector<double> in_;
   std::vector<double> out_;
+  void print_output()
+  {
+    std::cout << "Predictions:" << std::endl;
+    int i = 0;
+    for (const auto& v : out_)
+    {
+      std::cout << " " << std::round(9 * v);
+      if (++i % 64 == 0)
+        std::cout << std::endl;
+    }
+    std::cout << std::endl;
+  }
 };
 
 Geo::VectorD3 get_direction(
@@ -255,11 +267,12 @@ void train_mesh_segmentation(const char* _folder)
   const char* flnm = OUTDIR"/data";
   tr_dat.out_.resize(tr_dat.in_.size() / INPUT_SIZE);
   machine->predictN(tr_dat.in_, tr_dat.out_);
+  tr_dat.print_output();
   machine->save(flnm);
   auto machine2 = ML::IMachine<double>::make();
   machine2->load(flnm);
   tr_dat.in_.resize(INPUT_SIZE);
-  machine2->predict1(tr_dat.in_, tr_dat.out_);
-  std::cout << "Prediction is " << tr_dat.out_[0] << std::endl;
+  machine2->predictN(tr_dat.in_, tr_dat.out_);
+  tr_dat.print_output();
 }
 } // namespace MeshSegmentation

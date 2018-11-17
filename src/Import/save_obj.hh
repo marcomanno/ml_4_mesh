@@ -14,6 +14,9 @@ void save_obj(const char* _flnm,
   const std::vector<Geo::VectorD3>& _plgn,
   const std::vector<size_t>* _inds = nullptr);
 
+void save_polyline(const char* _flnm, const std::vector<Geo::VectorD2>& _plgn);
+
+
 struct ISaver
 {
   virtual void add_face(const Topo::Wrap<Topo::Type::FACE>& _f) = 0;
