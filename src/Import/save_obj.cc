@@ -185,6 +185,26 @@ void save_obj(const char* _flnm,
   ff << "\n";
 }
 
+
+template <typename ValType> void save_line(
+  std::ostream& _o_str, char type, 
+  const ValType& _a, const ValType& _b, const ValType& _c = 0)
+{
+  _o_str << type << ' ' << _a << ' ' << _b << ' ' << _c << std::endl;
+}
+
+void save_polyline(const char* _flnm, const std::vector<Geo::VectorD2>& _plgn)
+{
+  std::ofstream ff(std::string(_flnm) + ".obj");
+  for (auto pt : _plgn)
+    save_line(ff, 'v', pt[0], pt[1]);
+  for (size_t i = 2; i < _plgn.size(); i += 3)
+    save_line(ff, 'f', i, i - 1, i - 2);
+  if (_plgn.size() % 3 != 0)
+    if (_plgn.size() > 2)
+      save_line(ff, 'f', _plgn.size() - 1, _plgn.size() - 2, _plgn.size() - 3);
+}
+
 void save_obj(const char* _flnm,
   const std::vector<Topo::Wrap<Topo::Type::VERTEX>>& _verts)
 {
