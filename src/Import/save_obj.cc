@@ -198,11 +198,10 @@ void save_polyline(const char* _flnm, const std::vector<Geo::VectorD2>& _plgn)
   std::ofstream ff(std::string(_flnm) + ".obj");
   for (auto pt : _plgn)
     save_line(ff, 'v', pt[0], pt[1]);
-  for (size_t i = 2; i < _plgn.size(); i += 2)
+  for (size_t i = 3; i <= _plgn.size(); i += 2)
     save_line(ff, 'f', i, i - 1, i - 2);
-  if (_plgn.size() % 2 != 0)
-    if (_plgn.size() > 2)
-      save_line(ff, 'f', _plgn.size() - 1, _plgn.size() - 2, _plgn.size() - 3);
+  if (_plgn.size() > 2)
+    save_line(ff, 'f', _plgn.size(), _plgn.size() - 1, _plgn.size() - 2);
 }
 
 void save_obj(const char* _flnm,

@@ -253,3 +253,38 @@ TEST_CASE("my_flat_14", "[FlatteningFinal]")
 {
   flatten_complete("aaaa04.obj", false);
 }
+
+TEST_CASE("my_flat_15", "[FlatteningFinal]")
+{
+  flatten_complete("aaaa05.obj", false);
+}
+
+TEST_CASE("my_flat_15_constr", "[FlatteningFinal]")
+{
+  constr_function a_constr_function = [](Topo::Wrap<Topo::Type::BODY> _body)
+  {
+    std::vector<std::vector<MeshOp::FixedPositions>> constraints(2);
+    Topo::Iterator<Topo::Type::BODY, Topo::Type::VERTEX> bv_it(_body);
+    bool open = false;
+    for (auto v : bv_it)
+    {
+      Geo::Point pt;
+      v->geom(pt);
+      if (pt[0] > -18)
+        continue;
+      Topo::Iterator<Topo::Type::VERTEX, Topo::Type::EDGE> ve_it(v);
+      for (auto e : ve_it)
+      {
+        Topo::Iterator<Topo::Type::EDGE, Topo::Type::FACE> ef_it(e);
+        if (open = (ef_it.size() == 1))
+          break;
+      }
+      if (!open)
+        continue;
+      auto const_idx = pt[1] > 0;
+      constraints[const_idx].push_back({ v, {-pt[1], pt[2]} });
+    }
+    return constraints;
+  };
+  flatten_complete("aaaa05.obj", false, a_constr_function);
+}

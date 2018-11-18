@@ -6,6 +6,8 @@
 
 #include <Eigen/PardisoSupport>
 
+#include <Import/save_obj.hh>
+
 namespace MeshOp {
 
 namespace {
@@ -106,6 +108,8 @@ void ComputeData::set_constraints(std::vector<std::vector<FixedPositions>>& _con
   auto& vert_map = ef_.veterx_map();
   for (auto& constr_set : _constrs)
   {
+    std::vector<Geo::VectorD2> dd[3];
+
     std::vector<std::array<Geo::VectorD2, 2>> from_to_pts;
     for (auto& constr : constr_set)
     {
@@ -113,7 +117,10 @@ void ComputeData::set_constraints(std::vector<std::vector<FixedPositions>>& _con
       if (it == vert_map.end())
         throw "Vertex not found";
       auto ind = 2 * it->second;
-      from_to_pts.push_back({constr.pos_, {X_(ind), X_(ind + 1)} });
+      from_to_pts.push_back({constr.pos_, {X_(ind), X_(ind + 1)}});
+
+      dd[0].push_back(constr.pos_);
+      dd[1].push_back({X_(ind), X_(ind + 1)});
     }
     Eigen::Matrix2d R;
     Eigen::Vector2d T;
@@ -124,6 +131,12 @@ void ComputeData::set_constraints(std::vector<std::vector<FixedPositions>>& _con
       auto ind = 2 * vert_map.find(constr.vert_)->second;
       x << constr.pos_[0], constr.pos_[1];
       X_.segment<2>(ind) = R * x + T;
+      dd[2].push_back({X_(ind), X_(ind + 1)});
+    }
+    for (auto& xx : dd)
+    {
+      static int nn;
+      IO::save_polyline((std::string("C:/t/") + std::to_string(nn++)).c_str(), xx);
     }
   }
 }
