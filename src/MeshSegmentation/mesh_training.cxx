@@ -261,7 +261,7 @@ void train_mesh_segmentation(const char* _folder)
   for (int i = 0; i < tr_dat.out_.size(); ++i)
   {
     if ((tr_dat.out_[i] > 0) ^ (fabs(tr_dat.in_[INPUT_SIZE * i]) > 0.1))
-      std::cout << "Error";
+      std::cout << "Error " << tr_dat.out_[i] << " " << tr_dat.in_[INPUT_SIZE * i] << std::endl;
   }
   machine->train(tr_dat.in_, tr_dat.out_);
   const char* flnm = OUTDIR"/data";

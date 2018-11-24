@@ -101,7 +101,7 @@ void compute()
 
 int main()
 {
-  MeshSegmentation::train_mesh_segmentation(INDIR);
+  MeshSegmentation::train_mesh_segmentation(INDIR"/mesh_segmentation");
 #if 0
   compute();
   //tensorflow::port::InitMain(nullptr, 0, nullptr);
