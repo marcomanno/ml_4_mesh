@@ -99,9 +99,12 @@ void compute()
   std::cout << x1[0] << " " << x1[1] << " " << x1[2] << " ---> " << y1[0];
 }
 
-int main()
+int main(int _argc, char* _argv[])
 {
-  MeshSegmentation::train_mesh_segmentation(INDIR"/mesh_segmentation");
+  if (_argc == 1)
+    MeshSegmentation::train_mesh_segmentation(INDIR"/mesh_segmentation");
+  else
+    MeshSegmentation::apply_mesh_segmentation(INDIR"/mesh_segmentation2");
 #if 0
   compute();
   //tensorflow::port::InitMain(nullptr, 0, nullptr);

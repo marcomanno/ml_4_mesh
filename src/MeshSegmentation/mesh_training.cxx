@@ -172,27 +172,19 @@ struct MachineData
     _tr_dat.in_.insert(_tr_dat.in_.end(), input_var_.begin(), input_var_.end());
     _tr_dat.out_.push_back(_is_on_boundary ? 1. : 0.);
   }
+  bool predict(ML::IMachine<double>& _machine)
+  {
+    std::vector<double> res(1);
+    _machine.predict1(input_var_, res);
+    return res[0] > 0.5;
+  }
 };
 
-static void process(const fs::path& _mesh_file, TrainData& _tr_dat)
+std::map<Topo::Wrap<Topo::Type::COEDGE>, Angles> 
+compute_mesh_angles(Topo::Wrap<Topo::Type::BODY> _body)
 {
-  std::map<Topo::Wrap<Topo::Type::FACE>, int> face_groups;
-  auto body = IO::load_obj(convert(_mesh_file).c_str(), &face_groups);
-  std::set<Topo::Wrap<Topo::Type::EDGE>> boundary_edges;
-  {
-    Topo::Iterator<Topo::Type::BODY, Topo::Type::EDGE> be(body);
-    for (auto ed : be)
-    {
-      Topo::Iterator<Topo::Type::EDGE, Topo::Type::FACE> ef(ed);
-      if (ef.size() == 2)
-      {
-        if (face_groups[ef.get(0)] != face_groups[ef.get(1)])
-          boundary_edges.insert(ed);
-      }
-    }
-  }
   std::map<Topo::Wrap<Topo::Type::COEDGE>, Angles> mesh_angles;
-  Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE> bf(body);
+  Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE> bf(_body);
   for (auto f : bf)
   {
     Topo::Iterator<Topo::Type::FACE, Topo::Type::COEDGE> fc(f);
@@ -217,6 +209,28 @@ static void process(const fs::path& _mesh_file, TrainData& _tr_dat)
       coe_dat.edge_angle_ = ang1;
     }
   }
+  return mesh_angles;
+}
+
+static void
+process(const fs::path& _mesh_file, TrainData& _tr_dat)
+{
+  std::map<Topo::Wrap<Topo::Type::FACE>, int> face_groups;
+  auto body = IO::load_obj(convert(_mesh_file).c_str(), &face_groups);
+  std::set<Topo::Wrap<Topo::Type::EDGE>> boundary_edges;
+  {
+    Topo::Iterator<Topo::Type::BODY, Topo::Type::EDGE> be(body);
+    for (auto ed : be)
+    {
+      Topo::Iterator<Topo::Type::EDGE, Topo::Type::FACE> ef(ed);
+      if (ef.size() == 2)
+      {
+        if (face_groups[ef.get(0)] != face_groups[ef.get(1)])
+          boundary_edges.insert(ed);
+      }
+    }
+  }
+  auto mesh_angles = compute_mesh_angles(body);
   Topo::Iterator<Topo::Type::BODY, Topo::Type::EDGE> be(body);
   for (auto ed : be)
   {
@@ -226,6 +240,56 @@ static void process(const fs::path& _mesh_file, TrainData& _tr_dat)
     md.init(ed);
     md.process();
     md.train(is_boundary, _tr_dat);
+  }
+}
+
+void make_segmented_mesh(
+  const fs::path& _mesh_filename, ML::IMachine<double>& _machine)
+{
+  auto body = IO::load_obj(_mesh_filename.string().c_str());
+  auto mesh_angles = compute_mesh_angles(body);
+  Topo::Iterator<Topo::Type::BODY, Topo::Type::EDGE> be(body);
+  std::set<Topo::Wrap<Topo::Type::EDGE>> boundry_edges;
+  for (auto ed : be)
+  {
+    MachineData md(mesh_angles);
+    md.init(ed);
+    md.process();
+    if (md.predict(_machine))
+      boundry_edges.insert(ed);
+  }
+  Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE> bf(body);
+  std::map<Topo::Wrap<Topo::Type::FACE>, int> face_groups;
+  for (auto f : bf)
+    face_groups.emplace(f, -1);
+  int new_group = -1;
+  for (auto& fg : face_groups)
+  {
+    if (fg.second >= 0)
+      continue;
+    fg.second = ++new_group;
+    std::vector<Topo::Wrap<Topo::Type::FACE>> f_to_proc = { fg.first };
+    while (!f_to_proc.empty())
+    {
+      auto curr = f_to_proc.back();
+      f_to_proc.pop_back();
+      auto& fg = face_groups[curr];
+      if (fg >= 0)
+        continue;
+      fg = new_group;
+      Topo::Iterator<Topo::Type::FACE, Topo::Type::EDGE> fe(curr);
+      for (auto e : fe)
+      {
+        if (boundry_edges.find(e) != boundry_edges.end())
+          continue;
+        Topo::Iterator<Topo::Type::EDGE, Topo::Type::FACE> ef(e);
+        for (auto f : ef)
+        {
+          if (f != curr)
+            f_to_proc.push_back(f);
+        }
+      }
+    }
   }
 }
 
@@ -243,10 +307,18 @@ void train_mesh_segmentation_on_folder(
       process(itr->path(), _tr_dat);
   }
 }
+
 } // namespace
 
 namespace MeshSegmentation
 {
+
+static std::string data_file()
+{
+  return OUTDIR"/data";
+}
+
+
 void train_mesh_segmentation(const char* _folder)
 {
   auto machine = ML::IMachine<double>::make();
@@ -264,15 +336,34 @@ void train_mesh_segmentation(const char* _folder)
       std::cout << "Error " << tr_dat.out_[i] << " " << tr_dat.in_[INPUT_SIZE * i] << std::endl;
   }
   machine->train(tr_dat.in_, tr_dat.out_);
-  const char* flnm = OUTDIR"/data";
+  auto flnm = data_file();
   tr_dat.out_.resize(tr_dat.in_.size() / INPUT_SIZE);
   machine->predictN(tr_dat.in_, tr_dat.out_);
   tr_dat.print_output();
-  machine->save(flnm);
+  machine->save(flnm.c_str());
   auto machine2 = ML::IMachine<double>::make();
-  machine2->load(flnm);
+  machine2->load(flnm.c_str());
   tr_dat.in_.resize(INPUT_SIZE);
   machine2->predictN(tr_dat.in_, tr_dat.out_);
   tr_dat.print_output();
 }
+
+void apply_mesh_segmentation(const char* _folder)
+{
+  if (!fs::exists(_folder))
+    return;
+
+  auto machine = ML::IMachine<double>::make();
+  machine->load(data_file().c_str());
+
+  const fs::directory_iterator end_itr;
+  for (fs::directory_iterator itr(_folder); itr != end_itr; ++itr)
+  {
+    if (fs::is_directory(itr->status()))
+      apply_mesh_segmentation(itr->path().string().c_str());
+    else if (itr->path().extension() == ".obj")
+      make_segmented_mesh(itr->path(), *machine);
+  }
+}
+
 } // namespace MeshSegmentation
