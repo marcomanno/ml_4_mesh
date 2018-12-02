@@ -1,10 +1,14 @@
 #pragma once
 
 #include <Topology/topology.hh>
+#include <map>
 
 namespace IO {
 
-bool save_obj(const char* _flnm, Topo::Wrap<Topo::Type::BODY>, bool _split = true);
+using GroupsFaces = std::map<int, std::vector<Topo::Wrap<Topo::Type::FACE>>>;
+
+bool save_obj(const char* _flnm, Topo::Wrap<Topo::Type::BODY>, bool _split = true,
+              GroupsFaces* _groups_face = nullptr);
 bool save_face(const Topo::E<Topo::Type::FACE>* _ptr, int _num,
                const bool _split = true);
 bool save_face(const Topo::E<Topo::Type::FACE>* _ptr, const char* _flnm,

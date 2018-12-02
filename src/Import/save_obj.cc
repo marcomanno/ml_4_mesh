@@ -17,7 +17,7 @@
 namespace IO {
 
 bool save_obj(const char* _flnm, const Topo::Wrap<Topo::Type::BODY> _body,
-              bool _split)
+              bool _split, GroupsFaces* _groups_face)
 {
   std::ofstream fstr(_flnm);
   THROW_IF(!fstr, "IO save error");
@@ -42,11 +42,10 @@ bool save_obj(const char* _flnm, const Topo::Wrap<Topo::Type::BODY> _body,
   for (const auto& pt : all_pts)
     fstr << "v " << pt[0] << " " << pt[1] << " " << pt[2] << "\n";
 
-  Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE> face_it(_body);
-  for (size_t i = 0; i < face_it.size(); ++i)
+  auto save_face = [&fstr, _split, &all_pts]
+  (Topo::Wrap<Topo::Type::FACE> _f)
   {
-    auto f = face_it.get(i);
-    Topo::Iterator<Topo::Type::FACE, Topo::Type::LOOP> fl_it(f);
+    Topo::Iterator<Topo::Type::FACE, Topo::Type::LOOP> fl_it(_f);
     if (_split)
     {
       auto poly_t = Geo::IPolygonTriangulation::make();
@@ -96,7 +95,23 @@ bool save_obj(const char* _flnm, const Topo::Wrap<Topo::Type::BODY> _body,
         isle = true;
       }
     }
+  };
+  if (_groups_face == nullptr)
+  {
+    Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE> face_it(_body);
+    for (auto f : face_it)
+      save_face(f);
   }
+  else
+  {
+    for (auto& gf : *_groups_face)
+    {
+      fstr << "g mmGroup" << gf.first + 1 << std::endl;
+      for (auto f : gf.second)
+        save_face(f);
+    }
+  }
+  
   return fstr.good();
 }
 

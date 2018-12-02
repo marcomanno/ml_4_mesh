@@ -1,5 +1,6 @@
 #pragma optimize ("", off)
 #include "Import/load_obj.hh"
+#include "Import/save_obj.hh"
 #include "Topology/iterator.hh"
 
 #include "MeshSegmentation/machine.hxx"
@@ -259,11 +260,11 @@ void make_segmented_mesh(
       boundry_edges.insert(ed);
   }
   Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE> bf(body);
-  std::map<Topo::Wrap<Topo::Type::FACE>, int> face_groups;
+  std::map<Topo::Wrap<Topo::Type::FACE>, int> faces_group;
   for (auto f : bf)
-    face_groups.emplace(f, -1);
+    faces_group.emplace(f, -1);
   int new_group = -1;
-  for (auto& fg : face_groups)
+  for (auto& fg : faces_group)
   {
     if (fg.second >= 0)
       continue;
@@ -273,7 +274,7 @@ void make_segmented_mesh(
     {
       auto curr = f_to_proc.back();
       f_to_proc.pop_back();
-      auto& fg = face_groups[curr];
+      auto& fg = faces_group[curr];
       if (fg >= 0)
         continue;
       fg = new_group;
@@ -291,6 +292,18 @@ void make_segmented_mesh(
       }
     }
   }
+  std::map<int, std::vector<Topo::Wrap<Topo::Type::FACE>>> groups_faces;
+  for (auto& fg : faces_group)
+  {
+    groups_faces[fg.second].push_back(fg.first);
+  }
+  fs::path new_file(OUTDIR);
+  new_file.append("seg_mesh");
+  if (!fs::exists(new_file))
+    fs::create_directory(new_file);
+  new_file.append(_mesh_filename.string());
+
+  IO::save_obj(new_file.string().c_str, body, true, &groups_faces);
 }
 
 void train_mesh_segmentation_on_folder(
