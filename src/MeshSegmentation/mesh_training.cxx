@@ -268,7 +268,7 @@ void make_segmented_mesh(
   {
     if (fg.second >= 0)
       continue;
-    fg.second = ++new_group;
+    ++new_group;
     std::vector<Topo::Wrap<Topo::Type::FACE>> f_to_proc = { fg.first };
     while (!f_to_proc.empty())
     {
