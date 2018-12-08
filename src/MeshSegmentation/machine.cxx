@@ -225,6 +225,7 @@ Machine<RealT>::predict(
   TF_CHECK_OK(client_session_.Run({ { x_, x_0 } }, { *out_layer_ }, &outputs));
   auto size = outputs[0].dims();
   auto data = outputs[0].flat<RealT>().data();
+  _out.resize(size);
   std::copy_n(data, size, _out.begin());
 }
 

@@ -175,7 +175,7 @@ struct MachineData
   }
   bool predict(ML::IMachine<double>& _machine)
   {
-    std::vector<double> res(1);
+    std::vector<double> res;
     _machine.predict1(input_var_, res);
     return res[0] > 0.5;
   }
@@ -298,12 +298,13 @@ void make_segmented_mesh(
     groups_faces[fg.second].push_back(fg.first);
   }
   fs::path new_file(OUTDIR);
+  new_file.append("TestData");
   new_file.append("seg_mesh");
   if (!fs::exists(new_file))
     fs::create_directory(new_file);
-  new_file.append(_mesh_filename.string());
+  new_file.append(_mesh_filename.filename().string());
 
-  IO::save_obj(new_file.string().c_str, body, true, &groups_faces);
+  IO::save_obj(new_file.string().c_str(), body, true, &groups_faces);
 }
 
 void train_mesh_segmentation_on_folder(
