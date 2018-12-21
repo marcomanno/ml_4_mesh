@@ -22,7 +22,7 @@ target_include_directories(MeshSegmentation PUBLIC
 add_custom_command(
         TARGET MeshSegmentation POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy
-                ${CMAKE_SOURCE_DIR}/tensorflow/lib/tensorflow.dll
+                ${CMAKE_SOURCE_DIR}/tensorflow/bin/tensorflow.dll
                 $<TARGET_FILE_DIR:MeshSegmentation>/tensorflow.dll)
 
 add_definitions(-DOUTDIR="${CMAKE_SOURCE_DIR}/../out")

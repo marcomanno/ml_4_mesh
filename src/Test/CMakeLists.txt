@@ -26,7 +26,7 @@ target_include_directories(${project_name}
 add_custom_command(
         TARGET ${project_name} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy
-                ${CMAKE_SOURCE_DIR}/tensorflow/lib/tensorflow.dll
+                ${CMAKE_SOURCE_DIR}/tensorflow/bin/tensorflow.dll
                 $<TARGET_FILE_DIR:${project_name}>/tensorflow.dll)
 
 target_compile_options(${project_name}  PRIVATE /W3 /WX- /DMKL_ILP64 /Oi)
