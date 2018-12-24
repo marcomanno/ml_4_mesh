@@ -1,4 +1,4 @@
-#pragma optimize ("", off)
+//#pragma optimize ("", off)
 #include "machine.hxx"
 #include "tensorflow/cc/client/client_session.h"
 #include "tensorflow/cc/framework/gradients.h"
@@ -153,7 +153,7 @@ Machine<RealT>::set_target(tensorflow::Output& _layer)
     l2_losses.push_back(tensorflow::ops::L2Loss(scope_, w));
   auto regularization = tensorflow::ops::AddN(scope_, l2_losses);
 
-#if 1
+#if 0
   real_loss_ = tensorflow::ops::ReduceMean(scope_,
     tensorflow::ops::Square(scope_,
       tensorflow::ops::Sub(scope_, _layer, *y_)),
@@ -166,14 +166,14 @@ Machine<RealT>::set_target(tensorflow::Output& _layer)
       tensorflow::ops::Sub(scope_, _layer, *y_)),
     { 0, 1 });
 #endif
-  tensorflow::ops::Cast reg_coeff = tensorflow::ops::Cast(scope_, 0.000001, TfType);
+  tensorflow::ops::Cast reg_coeff = tensorflow::ops::Cast(scope_, 0, TfType);
   loss_ = tensorflow::ops::Add(
     scope_,
     real_loss_,
     tensorflow::ops::Mul(scope_, reg_coeff, regularization));
 
   // add the gradients operations to the graph
-  tensorflow::ops::Cast grad_coeff = tensorflow::ops::Cast(scope_, 0.0009, TfType);
+  tensorflow::ops::Cast grad_coeff = tensorflow::ops::Cast(scope_, 1.e-7, TfType);
   std::vector<tensorflow::Output> grad_outputs;
   tensorflow::AddSymbolicGradients(scope_, { loss_ }, weights_, &grad_outputs);
   for (int i = 0; i < std::size(weights_); ++i)
@@ -201,11 +201,11 @@ Machine<RealT>::train(const std::vector<RealT>& _in, const std::vector<RealT>& _
   std::copy(_out.begin(), _out.end(), y_data.flat<RealT>().data());
 
   // training steps
-  for (int i = 0; i <= 10000; ++i) {
-    if (i % 1000 == 0)
+  for (int i = 0; i <= 500000; ++i) {
+    if (i % 100 == 0)
     {
       std::vector<tensorflow::Tensor> outputs;
-      TF_CHECK_OK(client_session_.Run({ { x_, x_data }, { *y_, y_data } }, { real_loss_ }, &outputs));
+      TF_CHECK_OK(client_session_.Run({ { x_, x_data }, { *y_, y_data } }, { loss_ }, &outputs));
       std::cout << "Loss after " << i << " steps " << outputs[0].scalar<RealT>() << std::endl;
     }
     // nullptr because the output from the run is useless
@@ -223,7 +223,7 @@ Machine<RealT>::predict(
   std::copy(_in.begin(), _in.end(), x_0.flat<RealT>().data());
   std::vector<tensorflow::Tensor> outputs;
   TF_CHECK_OK(client_session_.Run({ { x_, x_0 } }, { *out_layer_ }, &outputs));
-  auto size = outputs[0].dims();
+  auto size = outputs[0].NumElements();
   auto data = outputs[0].flat<RealT>().data();
   _out.resize(size);
   std::copy_n(data, size, _out.begin());

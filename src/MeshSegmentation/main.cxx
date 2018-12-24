@@ -1,6 +1,6 @@
 ﻿// CMakeProject1.cpp : Defines the entry point for the application.
 //
-#pragma optimize ("", off)
+//#pragma optimize ("", off)
 
 #include "MeshSegmentation/mesh_training.hxx"
 

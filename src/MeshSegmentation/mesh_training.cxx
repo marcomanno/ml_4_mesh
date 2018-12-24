@@ -1,4 +1,4 @@
-#pragma optimize ("", off)
+//#pragma optimize ("", off)
 #include "Import/load_obj.hh"
 #include "Import/save_obj.hh"
 #include "Topology/iterator.hh"
@@ -338,10 +338,23 @@ void train_mesh_segmentation(const char* _folder)
   auto machine = ML::IMachine<double>::make();
   auto x = machine->make_input(INPUT_SIZE);
   auto y = machine->make_output(1);
-  auto w0 = machine->add_weight(INPUT_SIZE, 1);
-  auto b0 = machine->add_weight(1, 1);
+
+  const int INTERM_STEP = 1;
+
+  auto w0 = machine->add_weight(INPUT_SIZE, INTERM_STEP);
+  auto b0 = machine->add_weight(1, INTERM_STEP);
   auto layer0 = machine->add_layer(x, w0, b0);
-  machine->set_target(layer0);
+
+  if constexpr(INTERM_STEP == 1)
+    machine->set_target(layer0);
+  else
+  {
+    auto w1 = machine->add_weight(INTERM_STEP, 1);
+    auto b1 = machine->add_weight(INTERM_STEP, 1);
+    auto layer1 = machine->add_layer(tensorflow::Input(layer0), w1, b1);
+    machine->set_target(layer1);
+  }
+
   TrainData tr_dat;
   train_mesh_segmentation_on_folder(fs::path(_folder), tr_dat);
   for (int i = 0; i < tr_dat.out_.size(); ++i)
