@@ -177,7 +177,7 @@ struct MachineData
   {
     std::vector<double> res;
     _machine.predict1(input_var_, res);
-    return res[0] > 0.5;
+    return res[0] > 0.25;
   }
 };
 
@@ -244,6 +244,28 @@ process(const fs::path& _mesh_file, TrainData& _tr_dat)
   }
 }
 
+static void save_edges(std::set<Topo::Wrap<Topo::Type::EDGE>>& _boundry_edges,
+  const std::string& _bndrs_mesh_name)
+{
+  std::ofstream out(_bndrs_mesh_name);
+  auto save_point = [&out](const Geo::VectorD3& _pt)
+  {
+    out << "v " << _pt[0] << " " << _pt[1] << " " << _pt[2] << std::endl;
+  };
+  for (auto& ed : _boundry_edges)
+  {
+    Topo::Iterator<Topo::Type::EDGE, Topo::Type::VERTEX> ev(ed);
+    Geo::VectorD3 pt[2];
+    ev.get(0)->geom(pt[0]);
+    ev.get(1)->geom(pt[1]);
+    save_point(pt[0]);
+    save_point(pt[1]);
+    save_point(pt[0]);
+  }
+  for (size_t n = _boundry_edges.size(), i = 1; n-- > 0; i += 3)
+    out << "f " << i << " " << i + 1 << " " << i + 2 << std::endl;
+}
+
 void make_segmented_mesh(
   const fs::path& _mesh_filename, ML::IMachine<double>& _machine)
 {
@@ -297,14 +319,19 @@ void make_segmented_mesh(
   {
     groups_faces[fg.second].push_back(fg.first);
   }
-  fs::path new_file(OUTDIR);
-  new_file.append("TestData");
-  new_file.append("seg_mesh");
-  if (!fs::exists(new_file))
-    fs::create_directory(new_file);
+  fs::path new_file_dir(OUTDIR);
+  new_file_dir.append("TestData");
+  new_file_dir.append("seg_mesh");
+  if (!fs::exists(new_file_dir))
+    fs::create_directory(new_file_dir);
+  auto new_file = new_file_dir;
   new_file.append(_mesh_filename.filename().string());
 
   IO::save_obj(new_file.string().c_str(), body, true, &groups_faces);
+  auto fname = new_file.string();
+  fname.erase(fname.end() - 4, fname.end());
+  fname += "-bndr.obj";
+  save_edges(boundry_edges, fname);
 }
 
 void train_mesh_segmentation_on_folder(
@@ -339,7 +366,7 @@ void train_mesh_segmentation(const char* _folder)
   auto x = machine->make_input(INPUT_SIZE);
   auto y = machine->make_output(1);
 
-  const int INTERM_STEP = 1;
+  const int INTERM_STEP = 8;
 
   auto w0 = machine->add_weight(INPUT_SIZE, INTERM_STEP);
   auto b0 = machine->add_weight(1, INTERM_STEP);
@@ -350,7 +377,7 @@ void train_mesh_segmentation(const char* _folder)
   else
   {
     auto w1 = machine->add_weight(INTERM_STEP, 1);
-    auto b1 = machine->add_weight(INTERM_STEP, 1);
+    auto b1 = machine->add_weight(1, 1);
     auto layer1 = machine->add_layer(tensorflow::Input(layer0), w1, b1);
     machine->set_target(layer1);
   }

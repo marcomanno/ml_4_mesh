@@ -120,11 +120,10 @@ template <class RealT> tensorflow::Input
 Machine<RealT>::add_weight(int _m, int _n)
 {
   auto w = tensorflow::ops::Variable(scope_, { _m, _n }, TfType);
-  auto cc = tensorflow::ops::RandomNormal(scope_, { _m, _n }, TfType);
+  auto int_tensor = tensorflow::ops::Const(scope_, 0.0001, {_m, _n});
   auto assign = tensorflow::ops::Assign(
     scope_, w,
-    tensorflow::ops::ZerosLike(scope_, cc));
-    //tensorflow::ops::RandomNormal(scope_, { _m, _n }, TfType));
+    int_tensor);
   TF_CHECK_OK(client_session_.Run({assign}, nullptr));
   weights_.push_back(w);
   weights_size_.push_back({ _m, _n });
@@ -166,14 +165,14 @@ Machine<RealT>::set_target(tensorflow::Output& _layer)
       tensorflow::ops::Sub(scope_, _layer, *y_)),
     { 0, 1 });
 #endif
-  tensorflow::ops::Cast reg_coeff = tensorflow::ops::Cast(scope_, 0, TfType);
+  tensorflow::ops::Cast reg_coeff = tensorflow::ops::Cast(scope_, 1e-10, TfType);
   loss_ = tensorflow::ops::Add(
     scope_,
     real_loss_,
     tensorflow::ops::Mul(scope_, reg_coeff, regularization));
 
   // add the gradients operations to the graph
-  tensorflow::ops::Cast grad_coeff = tensorflow::ops::Cast(scope_, 1.e-7, TfType);
+  tensorflow::ops::Cast grad_coeff = tensorflow::ops::Cast(scope_, 1.e-5, TfType);
   std::vector<tensorflow::Output> grad_outputs;
   tensorflow::AddSymbolicGradients(scope_, { loss_ }, weights_, &grad_outputs);
   for (int i = 0; i < std::size(weights_); ++i)
@@ -181,7 +180,7 @@ Machine<RealT>::set_target(tensorflow::Output& _layer)
     apply_grad_.push_back(tensorflow::ops::ApplyGradientDescent(
       scope_, weights_[i], grad_coeff, { grad_outputs[i] }));
   }
-  out_layer_.reset(new tensorflow::Output(_layer.op(), _layer.index()));
+  out_layer_.reset(new tensorflow::Output(_layer));
   return loss_;
 }
 
@@ -201,7 +200,7 @@ Machine<RealT>::train(const std::vector<RealT>& _in, const std::vector<RealT>& _
   std::copy(_out.begin(), _out.end(), y_data.flat<RealT>().data());
 
   // training steps
-  for (int i = 0; i <= 500000; ++i) {
+  for (int i = 0; i <= 200000; ++i) {
     if (i % 100 == 0)
     {
       std::vector<tensorflow::Tensor> outputs;
