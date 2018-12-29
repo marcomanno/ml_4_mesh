@@ -33,13 +33,16 @@ struct Machine : public IMachine<RealT>
   Machine() : IMachine<RealT>(), client_session_(scope_){}
   tensorflow::Input make_input(int _rows) override;
   tensorflow::Input make_output(int _rows) override;
-  tensorflow::Input add_weight(int _m, int _n) override;
+  tensorflow::Input add_weight(int _m, int _n, const RealT& _init_val = 0) override;
   tensorflow::Output add_layer(
     tensorflow::Input& _X,
     tensorflow::Input& _A,
     tensorflow::Input& _B) override;
-  tensorflow::Input set_target(tensorflow::Output& _layer) override;
-  void train(const std::vector<RealT>& _in, const std::vector<RealT>& _out) override;
+  tensorflow::Input set_target(tensorflow::Output& _layer,
+    const RealT& _grad_coeff = 1.e-5, const RealT& _reg_coeff = 0) override;
+  void train(
+    const std::vector<RealT>& _in, const std::vector<RealT>& _out,
+    int _iterations = 10000) override;
 
   void predictN(const std::vector<RealT>& _in, std::vector<RealT> &_out) override
   {
@@ -117,10 +120,10 @@ Machine<RealT>::add_place_holder(
 }
 
 template <class RealT> tensorflow::Input 
-Machine<RealT>::add_weight(int _m, int _n)
+Machine<RealT>::add_weight(int _m, int _n, const RealT& _init_val)
 {
   auto w = tensorflow::ops::Variable(scope_, { _m, _n }, TfType);
-  auto int_tensor = tensorflow::ops::Const(scope_, 0.0001, {_m, _n});
+  auto int_tensor = tensorflow::ops::Const(scope_, _init_val, {_m, _n});
   auto assign = tensorflow::ops::Assign(
     scope_, w,
     int_tensor);
@@ -144,7 +147,8 @@ Machine<RealT>::add_layer(
 }
 
 template <class RealT> tensorflow::Input 
-Machine<RealT>::set_target(tensorflow::Output& _layer)
+Machine<RealT>::set_target(tensorflow::Output& _layer,
+    const RealT& _grad_coeff, const RealT& _reg_coeff)
 {
   // regularization
   tensorflow::OutputList l2_losses;
@@ -165,14 +169,14 @@ Machine<RealT>::set_target(tensorflow::Output& _layer)
       tensorflow::ops::Sub(scope_, _layer, *y_)),
     { 0, 1 });
 #endif
-  tensorflow::ops::Cast reg_coeff = tensorflow::ops::Cast(scope_, 1e-10, TfType);
+  tensorflow::ops::Cast reg_coeff = tensorflow::ops::Cast(scope_, _reg_coeff, TfType);
   loss_ = tensorflow::ops::Add(
     scope_,
     real_loss_,
     tensorflow::ops::Mul(scope_, reg_coeff, regularization));
 
   // add the gradients operations to the graph
-  tensorflow::ops::Cast grad_coeff = tensorflow::ops::Cast(scope_, 1.e-5, TfType);
+  tensorflow::ops::Cast grad_coeff = tensorflow::ops::Cast(scope_, _grad_coeff, TfType);
   std::vector<tensorflow::Output> grad_outputs;
   tensorflow::AddSymbolicGradients(scope_, { loss_ }, weights_, &grad_outputs);
   for (int i = 0; i < std::size(weights_); ++i)
@@ -185,7 +189,9 @@ Machine<RealT>::set_target(tensorflow::Output& _layer)
 }
 
 template <class RealT> void 
-Machine<RealT>::train(const std::vector<RealT>& _in, const std::vector<RealT>& _out)
+Machine<RealT>::train(
+  const std::vector<RealT>& _in, const std::vector<RealT>& _out,
+  int _iterations)
 {
   auto in_rows = x_size();
   tensorflow::Tensor x_data(
@@ -200,7 +206,7 @@ Machine<RealT>::train(const std::vector<RealT>& _in, const std::vector<RealT>& _
   std::copy(_out.begin(), _out.end(), y_data.flat<RealT>().data());
 
   // training steps
-  for (int i = 0; i <= 200000; ++i) {
+  for (int i = 0; i <= _iterations; ++i) {
     if (i % 100 == 0)
     {
       std::vector<tensorflow::Tensor> outputs;

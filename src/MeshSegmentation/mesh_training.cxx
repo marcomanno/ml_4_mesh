@@ -177,7 +177,7 @@ struct MachineData
   {
     std::vector<double> res;
     _machine.predict1(input_var_, res);
-    return res[0] > 0.25;
+    return res[0] > 0.5;
   }
 };
 
@@ -366,20 +366,29 @@ void train_mesh_segmentation(const char* _folder)
   auto x = machine->make_input(INPUT_SIZE);
   auto y = machine->make_output(1);
 
-  const int INTERM_STEP = 8;
+  const int INTERM_STEP1 = 3;
 
-  auto w0 = machine->add_weight(INPUT_SIZE, INTERM_STEP);
-  auto b0 = machine->add_weight(1, INTERM_STEP);
+  auto w0 = machine->add_weight(INPUT_SIZE, INTERM_STEP1);
+  auto b0 = machine->add_weight(1, INTERM_STEP1);
   auto layer0 = machine->add_layer(x, w0, b0);
 
-  if constexpr(INTERM_STEP == 1)
-    machine->set_target(layer0);
+  if constexpr(INTERM_STEP1 == 1)
+    machine->set_target(layer0, 1.e-6);
   else
   {
-    auto w1 = machine->add_weight(INTERM_STEP, 1);
-    auto b1 = machine->add_weight(1, 1);
+    const int INTERM_STEP2 = 1;
+    auto w1 = machine->add_weight(INTERM_STEP1, INTERM_STEP2, 1.e-5);
+    auto b1 = machine->add_weight(1, INTERM_STEP2, 1.e-5);
     auto layer1 = machine->add_layer(tensorflow::Input(layer0), w1, b1);
-    machine->set_target(layer1);
+    if constexpr(INTERM_STEP2 == 1)
+      machine->set_target(layer1, 9.e-6);
+    else
+    {
+    auto w2 = machine->add_weight(INTERM_STEP2, 1, -1e-3);
+    auto b2 = machine->add_weight(1, 1, -1e-3);
+    auto layer2 = machine->add_layer(tensorflow::Input(layer1), w2, b2);
+    machine->set_target(layer2, 1e-6);
+    }
   }
 
   TrainData tr_dat;
@@ -389,7 +398,7 @@ void train_mesh_segmentation(const char* _folder)
     if ((tr_dat.out_[i] > 0) ^ (fabs(tr_dat.in_[INPUT_SIZE * i]) > 0.1))
       std::cout << "Error " << tr_dat.out_[i] << " " << tr_dat.in_[INPUT_SIZE * i] << std::endl;
   }
-  machine->train(tr_dat.in_, tr_dat.out_);
+  machine->train(tr_dat.in_, tr_dat.out_, 20000);
   auto flnm = data_file();
   tr_dat.out_.resize(tr_dat.in_.size() / INPUT_SIZE);
   machine->predictN(tr_dat.in_, tr_dat.out_);

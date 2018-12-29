@@ -39,7 +39,7 @@ struct Weight
 };
 
 template <class InputT>
-auto make_layer(tensorflow::Scope& _scope,
+static auto make_layer(tensorflow::Scope& _scope,
                 InputT& _X,
                 tensorflow::Input& _A,
                 tensorflow::Input& _B)
@@ -50,7 +50,7 @@ auto make_layer(tensorflow::Scope& _scope,
 }
 
 template <class InputT>
-auto make_layer(tensorflow::Scope& _scope,
+static auto make_layer(tensorflow::Scope& _scope,
                 InputT& _X,
                 tensorflow::ops::Variable& _A,
                 tensorflow::ops::Variable& _B)
