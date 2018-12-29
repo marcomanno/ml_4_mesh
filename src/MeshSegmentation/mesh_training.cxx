@@ -20,9 +20,7 @@ namespace fs = std::filesystem;
 
 namespace
 {
-static const size_t INPUT_SIZE = 
-//56;
-1016;
+static const size_t INPUT_SIZE = 762;
 
 static std::string convert(const fs::path& _path)
 {
@@ -99,24 +97,23 @@ struct MachineData
     }
   }
 
-  void add_invalid(std::vector<FaceInfo>& _new_faces)
-  {
-    _new_faces.emplace_back();
-    _new_faces.emplace_back();
-    input_var_.insert(input_var_.end(), 4, 0.);
-  };
-
-
   bool add_element(const FaceInfo& _fi)
   {
     if (!_fi.valid_)
     {
-      input_var_.insert(input_var_.end(), 4, 0.);
+      input_var_.insert(input_var_.end(), 3, 0.);
       return false;
     }
     const auto& angs = mesh_angles_[_fi.coe_];
     input_var_.push_back(angs.edge_angle_);
     input_var_.push_back(angs.init_angle_);
+    Topo::Iterator<Topo::Type::FACE, Topo::Type::COEDGE> fc(_fi.face_);
+    size_t i = 0;
+    for (; i < 3 && fc.get(i) != _fi.coe_; ++i);
+    if (++i >= 3)
+      i = 0;
+    const auto& next_angs = mesh_angles_[fc.get(i)];
+    input_var_.push_back(next_angs.init_angle_);
     return true;
   }
 
@@ -148,8 +145,6 @@ struct MachineData
         std::swap(coeds[0], coeds[1]);
       for (auto cc : coeds)
       {
-        const auto& angs = mesh_angles_[cc];
-        input_var_.push_back(angs.init_angle_);
         Topo::Iterator<Topo::Type::COEDGE, Topo::Type::EDGE> ce(cc);
         auto ed = ce.get(0);
         if (!edges_.insert(ed).second)
@@ -381,7 +376,7 @@ void train_mesh_segmentation(const char* _folder)
     auto b1 = machine->add_weight(1, INTERM_STEP2, 1.e-5);
     auto layer1 = machine->add_layer(tensorflow::Input(layer0), w1, b1);
     if constexpr(INTERM_STEP2 == 1)
-      machine->set_target(layer1, 9.e-6);
+      machine->set_target(layer1, 2.e-5);
     else
     {
     auto w2 = machine->add_weight(INTERM_STEP2, 1, -1e-3);
@@ -398,7 +393,7 @@ void train_mesh_segmentation(const char* _folder)
     if ((tr_dat.out_[i] > 0) ^ (fabs(tr_dat.in_[INPUT_SIZE * i]) > 0.1))
       std::cout << "Error " << tr_dat.out_[i] << " " << tr_dat.in_[INPUT_SIZE * i] << std::endl;
   }
-  machine->train(tr_dat.in_, tr_dat.out_, 20000);
+  machine->train(tr_dat.in_, tr_dat.out_, 100000);
   auto flnm = data_file();
   tr_dat.out_.resize(tr_dat.in_.size() / INPUT_SIZE);
   machine->predictN(tr_dat.in_, tr_dat.out_);
