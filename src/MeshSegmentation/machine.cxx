@@ -169,11 +169,15 @@ Machine<RealT>::set_target(tensorflow::Output& _layer,
       tensorflow::ops::Sub(scope_, _layer, *y_)),
     { 0, 1 });
 #endif
+#if 1
+  loss_ = real_loss_;
+#else
   tensorflow::ops::Cast reg_coeff = tensorflow::ops::Cast(scope_, _reg_coeff, TfType);
   loss_ = tensorflow::ops::Add(
     scope_,
     real_loss_,
     tensorflow::ops::Mul(scope_, reg_coeff, regularization));
+#endif
 
   // add the gradients operations to the graph
   tensorflow::ops::Cast grad_coeff = tensorflow::ops::Cast(scope_, _grad_coeff, TfType);
@@ -216,6 +220,8 @@ Machine<RealT>::train(
     // nullptr because the output from the run is useless
     TF_CHECK_OK(client_session_.Run({ { x_, x_data }, { *y_, y_data } }, apply_grad_, nullptr));
   }
+  TF_CHECK_OK(client_session_.Run({ { x_, x_data }, { *y_, y_data } }, { loss_ }, &outputs));
+  std::cout << "Final loss " << outputs[0].scalar<RealT>() << std::endl;
 }
 
 template <class RealT> void 

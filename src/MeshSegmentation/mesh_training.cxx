@@ -172,7 +172,7 @@ struct MachineData
   {
     std::vector<double> res;
     _machine.predict1(input_var_, res);
-    return res[0] > 0.5;
+    return res[0] > 0.25;
   }
 };
 
@@ -208,37 +208,6 @@ compute_mesh_angles(Topo::Wrap<Topo::Type::BODY> _body)
   return mesh_angles;
 }
 
-static void
-process(const fs::path& _mesh_file, TrainData& _tr_dat)
-{
-  std::map<Topo::Wrap<Topo::Type::FACE>, int> face_groups;
-  auto body = IO::load_obj(convert(_mesh_file).c_str(), &face_groups);
-  std::set<Topo::Wrap<Topo::Type::EDGE>> boundary_edges;
-  {
-    Topo::Iterator<Topo::Type::BODY, Topo::Type::EDGE> be(body);
-    for (auto ed : be)
-    {
-      Topo::Iterator<Topo::Type::EDGE, Topo::Type::FACE> ef(ed);
-      if (ef.size() == 2)
-      {
-        if (face_groups[ef.get(0)] != face_groups[ef.get(1)])
-          boundary_edges.insert(ed);
-      }
-    }
-  }
-  auto mesh_angles = compute_mesh_angles(body);
-  Topo::Iterator<Topo::Type::BODY, Topo::Type::EDGE> be(body);
-  for (auto ed : be)
-  {
-    bool is_boundary =
-      boundary_edges.find(ed) != boundary_edges.end();
-    MachineData md(mesh_angles);
-    md.init(ed);
-    md.process();
-    md.train(is_boundary, _tr_dat);
-  }
-}
-
 static void save_edges(std::set<Topo::Wrap<Topo::Type::EDGE>>& _boundry_edges,
   const std::string& _bndrs_mesh_name)
 {
@@ -259,6 +228,43 @@ static void save_edges(std::set<Topo::Wrap<Topo::Type::EDGE>>& _boundry_edges,
   }
   for (size_t n = _boundry_edges.size(), i = 1; n-- > 0; i += 3)
     out << "f " << i << " " << i + 1 << " " << i + 2 << std::endl;
+}
+
+static void
+process(const fs::path& _mesh_file, TrainData& _tr_dat)
+{
+  std::map<Topo::Wrap<Topo::Type::FACE>, int> face_groups;
+  auto body = IO::load_obj(convert(_mesh_file).c_str(), &face_groups);
+  std::set<Topo::Wrap<Topo::Type::EDGE>> boundary_edges;
+  {
+    Topo::Iterator<Topo::Type::BODY, Topo::Type::EDGE> be(body);
+    for (auto ed : be)
+    {
+      Topo::Iterator<Topo::Type::EDGE, Topo::Type::FACE> ef(ed);
+      if (ef.size() == 2)
+      {
+        if (face_groups[ef.get(0)] != face_groups[ef.get(1)])
+          boundary_edges.insert(ed);
+      }
+    }
+  }
+#if 0
+  auto out_bndr_file = _mesh_file.string();
+  out_bndr_file.resize(out_bndr_file.size() - 4);
+  out_bndr_file += "-bndr.obj";
+  save_edges(boundary_edges, out_bndr_file.c_str());
+#endif
+  auto mesh_angles = compute_mesh_angles(body);
+  Topo::Iterator<Topo::Type::BODY, Topo::Type::EDGE> be(body);
+  for (auto ed : be)
+  {
+    bool is_boundary =
+      boundary_edges.find(ed) != boundary_edges.end();
+    MachineData md(mesh_angles);
+    md.init(ed);
+    md.process();
+    md.train(is_boundary, _tr_dat);
+  }
 }
 
 void make_segmented_mesh(
@@ -361,7 +367,7 @@ void train_mesh_segmentation(const char* _folder)
   auto x = machine->make_input(INPUT_SIZE);
   auto y = machine->make_output(1);
 
-  const int INTERM_STEP1 = 3;
+  const int INTERM_STEP1 = 5;
 
   auto w0 = machine->add_weight(INPUT_SIZE, INTERM_STEP1);
   auto b0 = machine->add_weight(1, INTERM_STEP1);
@@ -372,8 +378,8 @@ void train_mesh_segmentation(const char* _folder)
   else
   {
     const int INTERM_STEP2 = 1;
-    auto w1 = machine->add_weight(INTERM_STEP1, INTERM_STEP2, 1.e-5);
-    auto b1 = machine->add_weight(1, INTERM_STEP2, 1.e-5);
+    auto w1 = machine->add_weight(INTERM_STEP1, INTERM_STEP2, 1.e-4);
+    auto b1 = machine->add_weight(1, INTERM_STEP2, 1.e-4);
     auto layer1 = machine->add_layer(tensorflow::Input(layer0), w1, b1);
     if constexpr(INTERM_STEP2 == 1)
       machine->set_target(layer1, 2.e-5);
@@ -393,7 +399,7 @@ void train_mesh_segmentation(const char* _folder)
     if ((tr_dat.out_[i] > 0) ^ (fabs(tr_dat.in_[INPUT_SIZE * i]) > 0.1))
       std::cout << "Error " << tr_dat.out_[i] << " " << tr_dat.in_[INPUT_SIZE * i] << std::endl;
   }
-  machine->train(tr_dat.in_, tr_dat.out_, 100000);
+  machine->train(tr_dat.in_, tr_dat.out_, 10000);
   auto flnm = data_file();
   tr_dat.out_.resize(tr_dat.in_.size() / INPUT_SIZE);
   machine->predictN(tr_dat.in_, tr_dat.out_);
