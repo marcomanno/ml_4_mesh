@@ -33,7 +33,8 @@ struct Machine : public IMachine<RealT>
   Machine() : IMachine<RealT>(), client_session_(scope_){}
   tensorflow::Input make_input(int _rows) override;
   tensorflow::Input make_output(int _rows) override;
-  tensorflow::Input add_weight(int _m, int _n, const RealT& _init_val = 0) override;
+  tensorflow::Input add_weight(int _m, int _n,
+    const RealT& _init_val = 0, const RealT& _grad_ceoff = 0) override;
   tensorflow::Output add_layer(
     tensorflow::Input& _X,
     tensorflow::Input& _A,
@@ -64,7 +65,13 @@ private:
   tensorflow::int64 x_size_ = 0;
 
   std::vector<tensorflow::Output> weights_;
-  std::vector<std::array<int, 2>> weights_size_;
+  struct WeigthInfo
+  {
+    WeigthInfo(int _m, int _n, RealT _grad_coeff) : size_{ _m, _n }, grad_coeff_(_grad_coeff) {}
+    std::array<int, 2> size_;
+    double grad_coeff_;
+  };
+  std::vector<WeigthInfo> weights_info_;
 
   tensorflow::Output loss_, real_loss_;
   std::vector<tensorflow::Output> apply_grad_;
@@ -120,7 +127,7 @@ Machine<RealT>::add_place_holder(
 }
 
 template <class RealT> tensorflow::Input 
-Machine<RealT>::add_weight(int _m, int _n, const RealT& _init_val)
+Machine<RealT>::add_weight(int _m, int _n, const RealT& _init_val, const RealT& _grad_coeff)
 {
   auto w = tensorflow::ops::Variable(scope_, { _m, _n }, TfType);
   auto int_tensor = tensorflow::ops::Const(scope_, _init_val, {_m, _n});
@@ -129,7 +136,7 @@ Machine<RealT>::add_weight(int _m, int _n, const RealT& _init_val)
     int_tensor);
   TF_CHECK_OK(client_session_.Run({assign}, nullptr));
   weights_.push_back(w);
-  weights_size_.push_back({ _m, _n });
+  weights_info_.emplace_back(_m, _n, _grad_coeff);
   return w;
 }
 
@@ -180,11 +187,12 @@ Machine<RealT>::set_target(tensorflow::Output& _layer,
 #endif
 
   // add the gradients operations to the graph
-  tensorflow::ops::Cast grad_coeff = tensorflow::ops::Cast(scope_, _grad_coeff, TfType);
   std::vector<tensorflow::Output> grad_outputs;
   tensorflow::AddSymbolicGradients(scope_, { loss_ }, weights_, &grad_outputs);
   for (int i = 0; i < std::size(weights_); ++i)
   {
+    auto coeff = weights_info_[i].grad_coeff_ == 0 ? _grad_coeff : weights_info_[i].grad_coeff_;
+    tensorflow::ops::Cast grad_coeff = tensorflow::ops::Cast(scope_, coeff, TfType);
     apply_grad_.push_back(tensorflow::ops::ApplyGradientDescent(
       scope_, weights_[i], grad_coeff, { grad_outputs[i] }));
   }
@@ -210,10 +218,10 @@ Machine<RealT>::train(
   std::copy(_out.begin(), _out.end(), y_data.flat<RealT>().data());
 
   // training steps
+  std::vector<tensorflow::Tensor> outputs;
   for (int i = 0; i <= _iterations; ++i) {
     if (i % 100 == 0)
     {
-      std::vector<tensorflow::Tensor> outputs;
       TF_CHECK_OK(client_session_.Run({ { x_, x_data }, { *y_, y_data } }, { loss_ }, &outputs));
       std::cout << "Loss after " << i << " steps " << outputs[0].scalar<RealT>() << std::endl;
     }
@@ -258,7 +266,7 @@ void Machine<RealT>::save(const char* _flnm)
   for (size_t i = 0; i < weights_.size(); ++i)
   {
     const auto& w = weights_[i];
-    const auto& ws = weights_size_[i];
+    const auto& ws = weights_info_[i].size_;
     graph_stream << "W " << w.node()->id() << " " << ws[0] << " " << ws[1] << std::endl;
 
     std::vector<tensorflow::Tensor> t(1);

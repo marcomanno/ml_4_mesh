@@ -25,7 +25,8 @@ struct IMachine
   static std::shared_ptr<IMachine<RealT>> make();
   virtual tensorflow::Input make_input(int _rows) = 0;
   virtual tensorflow::Input make_output(int _rows) = 0;
-  virtual tensorflow::Input add_weight(int _m, int _n, const RealT& _init_val = 0) = 0;
+  virtual tensorflow::Input add_weight(int _m, int _n,
+    const RealT& _init_val = 0, const RealT& _grad_ceoff = 0) = 0;
   virtual tensorflow::Output add_layer(
     tensorflow::Input& _X,
     tensorflow::Input& _A,

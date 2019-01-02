@@ -41,17 +41,13 @@ struct TrainData
 {
   std::vector<double> in_;
   std::vector<double> out_;
-  void print_output()
+  void print_output(std::vector<double>& _exp_res)
   {
-    std::cout << "Predictions:" << std::endl;
-    int i = 0;
-    for (const auto& v : out_)
-    {
-      std::cout << " " << std::round(9 * v);
-      if (++i % 64 == 0)
-        std::cout << std::endl;
-    }
-    std::cout << std::endl;
+    size_t wrong_nmbr = 0;
+    for (int i = 0; i < _exp_res.size(); ++i)
+      if (fabs(out_[i] - _exp_res[i]) >= 0.5)
+        ++wrong_nmbr;
+    std::cout << "Wrong prediction = " << wrong_nmbr << std::endl;
   }
 };
 
@@ -71,10 +67,23 @@ struct FaceInfo
   FaceInfo(const Topo::Wrap<Topo::Type::FACE>& _f,
            const Topo::Wrap<Topo::Type::COEDGE>& _c,
            bool _valid = true) :
-    face_(_f), coe_(_c), valid_(_valid) {}
+    face_(_f), coe_(_c), valid_(_valid) 
+  {
+    Topo::Iterator<Topo::Type::FACE, Topo::Type::VERTEX> fv(face_);
+    std::vector<Geo::Point> pts;
+    for (auto v : fv)
+    {
+      pts.emplace_back();
+      v->geom(pts.back());
+    }
+    if (pts.size() != 3)
+      throw "Bad mesh format";
+    area_ = Geo::length((pts[1] - pts[0]) % (pts[2] - pts[0])) / 2;
+  }
   Topo::Wrap<Topo::Type::FACE> face_;
   Topo::Wrap<Topo::Type::COEDGE> coe_;
   bool valid_;
+  double area_ = 0;
 };
 
 struct MachineData
@@ -93,8 +102,11 @@ struct MachineData
     for (auto c : ec)
     {
       Topo::Iterator<Topo::Type::COEDGE, Topo::Type::FACE> cf(c);
+      auto f = cf.get(0);
       faces_.emplace_back(cf.get(0), c, true);
     }
+    if (faces_[0].area_ > faces_[1].area_)
+      std::swap(faces_[0], faces_[1]);
   }
 
   bool add_element(const FaceInfo& _fi)
@@ -120,7 +132,11 @@ struct MachineData
   void process()
   {
     if (input_var_.size() >= INPUT_SIZE)
+    {
+      if (input_var_.size() != INPUT_SIZE)
+        throw "Wrong size";
       return;
+    }
     std::vector<FaceInfo> new_faces;
     for (auto& fi : faces_)
     {
@@ -163,6 +179,25 @@ struct MachineData
     faces_ = std::move(new_faces);
     process();
   }
+
+  void debug_save(Topo::Wrap<Topo::Type::EDGE> _ed, bool _is_boundary)
+  {
+    Geo::Segment seg;
+    _ed->geom(seg);
+    if (seg[0] < seg[1])
+      std::swap(seg[0], seg[1]);
+    std::string fname;
+    for (auto& pt : seg)
+    {
+      for (auto& v : pt)
+        fname += std::to_string(v);
+    }
+    std::ofstream oo(fname);
+    for (const auto v : input_var_)
+      oo << v << std::endl;
+    oo << _is_boundary << std::endl;
+  }
+
   void train(bool _is_on_boundary, TrainData& _tr_dat)
   {
     _tr_dat.in_.insert(_tr_dat.in_.end(), input_var_.begin(), input_var_.end());
@@ -172,7 +207,7 @@ struct MachineData
   {
     std::vector<double> res;
     _machine.predict1(input_var_, res);
-    return res[0] > 0.25;
+    return res[0] > 0.5;
   }
 };
 
@@ -264,6 +299,7 @@ process(const fs::path& _mesh_file, TrainData& _tr_dat)
     md.init(ed);
     md.process();
     md.train(is_boundary, _tr_dat);
+    // md.debug_save(ed, is_boundary);
   }
 }
 
@@ -369,26 +405,27 @@ void train_mesh_segmentation(const char* _folder)
 
   const int INTERM_STEP1 = 5;
 
-  auto w0 = machine->add_weight(INPUT_SIZE, INTERM_STEP1);
-  auto b0 = machine->add_weight(1, INTERM_STEP1);
+  double grad_coeff[3] = {2e-5, 2e-5, 1e-7};
+  auto w0 = machine->add_weight(INPUT_SIZE, INTERM_STEP1, 0, grad_coeff[0]);
+  auto b0 = machine->add_weight(1, INTERM_STEP1, 0, grad_coeff[0]);
   auto layer0 = machine->add_layer(x, w0, b0);
 
   if constexpr(INTERM_STEP1 == 1)
-    machine->set_target(layer0, 1.e-6);
+    machine->set_target(layer0, 1.e-6, 1e-10);
   else
   {
     const int INTERM_STEP2 = 1;
-    auto w1 = machine->add_weight(INTERM_STEP1, INTERM_STEP2, 1.e-4);
-    auto b1 = machine->add_weight(1, INTERM_STEP2, 1.e-4);
+    auto w1 = machine->add_weight(INTERM_STEP1, INTERM_STEP2, 1.e-4, grad_coeff[1]);
+    auto b1 = machine->add_weight(1, INTERM_STEP2, 1.e-4, grad_coeff[1]);
     auto layer1 = machine->add_layer(tensorflow::Input(layer0), w1, b1);
     if constexpr(INTERM_STEP2 == 1)
-      machine->set_target(layer1, 2.e-5);
+      machine->set_target(layer1, 2.e-5, 1e-10);
     else
     {
-    auto w2 = machine->add_weight(INTERM_STEP2, 1, -1e-3);
-    auto b2 = machine->add_weight(1, 1, -1e-3);
+    auto w2 = machine->add_weight(INTERM_STEP2, 1, 1e-3, grad_coeff[2]);
+    auto b2 = machine->add_weight(1, 1, 1e-3, grad_coeff[2]);
     auto layer2 = machine->add_layer(tensorflow::Input(layer1), w2, b2);
-    machine->set_target(layer2, 1e-6);
+    machine->set_target(layer2, 1e-8, 1e-10);
     }
   }
 
@@ -399,17 +436,18 @@ void train_mesh_segmentation(const char* _folder)
     if ((tr_dat.out_[i] > 0) ^ (fabs(tr_dat.in_[INPUT_SIZE * i]) > 0.1))
       std::cout << "Error " << tr_dat.out_[i] << " " << tr_dat.in_[INPUT_SIZE * i] << std::endl;
   }
-  machine->train(tr_dat.in_, tr_dat.out_, 10000);
+  machine->train(tr_dat.in_, tr_dat.out_, 200000);
   auto flnm = data_file();
   tr_dat.out_.resize(tr_dat.in_.size() / INPUT_SIZE);
+  auto expecetd_result = tr_dat.out_;
   machine->predictN(tr_dat.in_, tr_dat.out_);
-  tr_dat.print_output();
+  tr_dat.print_output(expecetd_result);
   machine->save(flnm.c_str());
   auto machine2 = ML::IMachine<double>::make();
   machine2->load(flnm.c_str());
   tr_dat.in_.resize(INPUT_SIZE);
   machine2->predictN(tr_dat.in_, tr_dat.out_);
-  tr_dat.print_output();
+  tr_dat.print_output(expecetd_result);
 }
 
 void apply_mesh_segmentation(const char* _folder)
