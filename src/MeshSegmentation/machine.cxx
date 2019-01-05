@@ -130,10 +130,15 @@ template <class RealT> tensorflow::Input
 Machine<RealT>::add_weight(int _m, int _n, const RealT& _init_val, const RealT& _grad_coeff)
 {
   auto w = tensorflow::ops::Variable(scope_, { _m, _n }, TfType);
-  auto int_tensor = tensorflow::ops::Const(scope_, _init_val, {_m, _n});
-  auto assign = tensorflow::ops::Assign(
-    scope_, w,
-    int_tensor);
+
+  tensorflow::Tensor int_tensor(TfType, tensorflow::TensorShape{ _m, _n });
+  {
+    std::vector<RealT> init_values(_m * _n);
+    for (int i = 0; i < init_values.size(); ++i)
+      init_values[i] = static_cast<double>((i * 1000) % 331) / 331 * _init_val;
+    std::copy(init_values.begin(), init_values.end(), int_tensor.flat<RealT>().data());
+  }
+  auto assign = tensorflow::ops::Assign(scope_, w, int_tensor);
   TF_CHECK_OK(client_session_.Run({assign}, nullptr));
   weights_.push_back(w);
   weights_info_.emplace_back(_m, _n, _grad_coeff);
