@@ -405,25 +405,26 @@ void train_mesh_segmentation(const char* _folder)
 
   const int INTERM_STEP1 = 5;
 
-  double grad_coeff[3] = {2e-5, 2e-5, 1e-7};
-  auto w0 = machine->add_weight(INPUT_SIZE, INTERM_STEP1, 0, grad_coeff[0]);
-  auto b0 = machine->add_weight(1, INTERM_STEP1, 0, grad_coeff[0]);
+  double grad_coeff[3] = {1e-5, 1e-5, 1e-5};
+  double int_coeff[3] = {0, 0.1, 0.1};
+  auto w0 = machine->add_weight(INPUT_SIZE, INTERM_STEP1, int_coeff[0], grad_coeff[0]);
+  auto b0 = machine->add_weight(1, INTERM_STEP1, int_coeff[0], grad_coeff[0]);
   auto layer0 = machine->add_layer(x, w0, b0);
 
   if constexpr(INTERM_STEP1 == 1)
     machine->set_target(layer0, 1.e-6, 1e-10);
   else
   {
-    const int INTERM_STEP2 = 1;
-    auto w1 = machine->add_weight(INTERM_STEP1, INTERM_STEP2, 1.e-4, grad_coeff[1]);
-    auto b1 = machine->add_weight(1, INTERM_STEP2, 1.e-4, grad_coeff[1]);
+    const int INTERM_STEP2 = 3;
+    auto w1 = machine->add_weight(INTERM_STEP1, INTERM_STEP2, int_coeff[1], grad_coeff[1]);
+    auto b1 = machine->add_weight(1, INTERM_STEP2, int_coeff[1], grad_coeff[1]);
     auto layer1 = machine->add_layer(tensorflow::Input(layer0), w1, b1);
     if constexpr(INTERM_STEP2 == 1)
       machine->set_target(layer1, 2.e-5, 1e-10);
     else
     {
-    auto w2 = machine->add_weight(INTERM_STEP2, 1, 1e-3, grad_coeff[2]);
-    auto b2 = machine->add_weight(1, 1, 1e-3, grad_coeff[2]);
+    auto w2 = machine->add_weight(INTERM_STEP2, 1, int_coeff[2], grad_coeff[2]);
+    auto b2 = machine->add_weight(1, 1, int_coeff[2], grad_coeff[2]);
     auto layer2 = machine->add_layer(tensorflow::Input(layer1), w2, b2);
     machine->set_target(layer2, 1e-8, 1e-10);
     }
