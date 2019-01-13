@@ -85,6 +85,23 @@ private:
   auto y_size() const { return y_size_; }
   void predict(const std::vector<RealT>& _in, std::vector<RealT> &_out, 
                tensorflow::int64 _x_size);
+
+  tensorflow::ops::Variable add_var(
+    const std::array<int, 2> & _shape, RealT _init_val)
+  {
+    auto var = tensorflow::ops::Variable(scope_, { _shape[0], _shape[1] }, TfType);
+    tensorflow::Tensor int_tensor(TfType, tensorflow::TensorShape{ _shape[0], _shape[1] });
+    {
+      auto size = _shape[0] * _shape[1];
+      std::vector<RealT> init_values(size);
+      for (auto& v : init_values) v = _init_val;
+      std::copy(init_values.begin(), init_values.end(), int_tensor.flat<RealT>().data());
+    }
+    auto assign = tensorflow::ops::Assign(scope_, var, int_tensor);
+    TF_CHECK_OK(client_session_.Run({assign}, nullptr));
+    return var;
+  }
+
 };
 
 template <typename RealT> std::shared_ptr<IMachine<RealT>>
@@ -135,7 +152,7 @@ Machine<RealT>::add_weight(int _m, int _n, const RealT& _init_val, const RealT& 
   {
     std::vector<RealT> init_values(_m * _n);
     for (int i = 0; i < init_values.size(); ++i)
-      init_values[i] = static_cast<double>((i * 1000) % 331) / 331 * _init_val;
+      init_values[i] = static_cast<double>((i * 1000) % 31) / 31 * _init_val;
     std::copy(init_values.begin(), init_values.end(), int_tensor.flat<RealT>().data());
   }
   auto assign = tensorflow::ops::Assign(scope_, w, int_tensor);
@@ -194,12 +211,33 @@ Machine<RealT>::set_target(tensorflow::Output& _layer,
   // add the gradients operations to the graph
   std::vector<tensorflow::Output> grad_outputs;
   tensorflow::AddSymbolicGradients(scope_, { loss_ }, weights_, &grad_outputs);
-  for (int i = 0; i < std::size(weights_); ++i)
+  for (int i = 0; i < weights_.size(); ++i)
   {
-    auto coeff = weights_info_[i].grad_coeff_ == 0 ? _grad_coeff : weights_info_[i].grad_coeff_;
-    tensorflow::ops::Cast grad_coeff = tensorflow::ops::Cast(scope_, coeff, TfType);
+#if 1
+    apply_grad_.push_back(tensorflow::ops::ApplyAdam(
+      scope_, weights_[i],
+      add_var(weights_info_[i].size_, 0.),
+      add_var(weights_info_[i].size_, 0.),
+      tensorflow::Input::Initializer(static_cast<RealT>(0.)),
+      tensorflow::Input::Initializer(static_cast<RealT>(0.)),
+      tensorflow::Input::Initializer(static_cast<RealT>(2.e-4)), // learning rate
+      tensorflow::Input::Initializer(static_cast<RealT>(0.9)),   // beta1
+      tensorflow::Input::Initializer(static_cast<RealT>(0.99)),  // beta2
+      tensorflow::Input::Initializer(static_cast<RealT>(0.00001)),  // eps
+      { grad_outputs[i] }));
+    if (!scope_.ok())
+    {
+      std::cout << scope_.status().ToString();
+      abort();
+    }
+
+#else
+    auto coeff = tensorflow::Input::Initializer(
+      weights_info_[i].grad_coeff_ == 0 ? _grad_coeff : weights_info_[i].grad_coeff_);
+    auto grad_coeff = tensorflow::ops::Cast(scope_, coeff, TfType);
     apply_grad_.push_back(tensorflow::ops::ApplyGradientDescent(
       scope_, weights_[i], grad_coeff, { grad_outputs[i] }));
+#endif
   }
   out_layer_.reset(new tensorflow::Output(_layer));
   return loss_;

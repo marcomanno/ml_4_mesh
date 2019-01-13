@@ -21,6 +21,8 @@ namespace fs = std::filesystem;
 namespace
 {
 static const size_t INPUT_SIZE = 762;
+//static const size_t INPUT_SIZE = 378;
+//static const size_t INPUT_SIZE = 186;
 
 static std::string convert(const fs::path& _path)
 {
@@ -207,7 +209,7 @@ struct MachineData
   {
     std::vector<double> res;
     _machine.predict1(input_var_, res);
-    return res[0] > 0.5;
+    return res[0] > 0.25;
   }
 };
 
@@ -406,7 +408,7 @@ void train_mesh_segmentation(const char* _folder)
   const int INTERM_STEP1 = 5;
 
   double grad_coeff[3] = {1e-5, 1e-5, 1e-5};
-  double int_coeff[3] = {0, 0.1, 0.1};
+  double int_coeff[3] = {0, 0.2, 0.2};
   auto w0 = machine->add_weight(INPUT_SIZE, INTERM_STEP1, int_coeff[0], grad_coeff[0]);
   auto b0 = machine->add_weight(1, INTERM_STEP1, int_coeff[0], grad_coeff[0]);
   auto layer0 = machine->add_layer(x, w0, b0);
