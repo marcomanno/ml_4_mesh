@@ -209,7 +209,7 @@ struct MachineData
   {
     std::vector<double> res;
     _machine.predict1(input_var_, res);
-    return res[0] > 0.25;
+    return res[0] > 0.5;
   }
 };
 
@@ -398,6 +398,28 @@ static std::string data_file()
   return OUTDIR"/data";
 }
 
+static void train_on_folder(ML::IMachine<double>* _machine, const char* _folder)
+{
+  TrainData tr_dat;
+  train_mesh_segmentation_on_folder(fs::path(_folder), tr_dat);
+  for (int i = 0; i < tr_dat.out_.size(); ++i)
+  {
+    if ((tr_dat.out_[i] > 0) ^ (fabs(tr_dat.in_[INPUT_SIZE * i]) > 0.1))
+      std::cout << "Error " << tr_dat.out_[i] << " " << tr_dat.in_[INPUT_SIZE * i] << std::endl;
+  }
+  _machine->train(tr_dat.in_, tr_dat.out_, 200000);
+  auto flnm = data_file();
+  tr_dat.out_.resize(tr_dat.in_.size() / INPUT_SIZE);
+  auto expecetd_result = tr_dat.out_;
+  _machine->predictN(tr_dat.in_, tr_dat.out_);
+  tr_dat.print_output(expecetd_result);
+  _machine->save(flnm.c_str());
+  auto machine2 = ML::IMachine<double>::make();
+  machine2->load(flnm.c_str());
+  tr_dat.in_.resize(INPUT_SIZE);
+  machine2->predictN(tr_dat.in_, tr_dat.out_);
+  tr_dat.print_output(expecetd_result);
+}
 
 void train_mesh_segmentation(const char* _folder)
 {
@@ -432,25 +454,7 @@ void train_mesh_segmentation(const char* _folder)
     }
   }
 
-  TrainData tr_dat;
-  train_mesh_segmentation_on_folder(fs::path(_folder), tr_dat);
-  for (int i = 0; i < tr_dat.out_.size(); ++i)
-  {
-    if ((tr_dat.out_[i] > 0) ^ (fabs(tr_dat.in_[INPUT_SIZE * i]) > 0.1))
-      std::cout << "Error " << tr_dat.out_[i] << " " << tr_dat.in_[INPUT_SIZE * i] << std::endl;
-  }
-  machine->train(tr_dat.in_, tr_dat.out_, 200000);
-  auto flnm = data_file();
-  tr_dat.out_.resize(tr_dat.in_.size() / INPUT_SIZE);
-  auto expecetd_result = tr_dat.out_;
-  machine->predictN(tr_dat.in_, tr_dat.out_);
-  tr_dat.print_output(expecetd_result);
-  machine->save(flnm.c_str());
-  auto machine2 = ML::IMachine<double>::make();
-  machine2->load(flnm.c_str());
-  tr_dat.in_.resize(INPUT_SIZE);
-  machine2->predictN(tr_dat.in_, tr_dat.out_);
-  tr_dat.print_output(expecetd_result);
+  train_on_folder(machine.get(), _folder);
 }
 
 void apply_mesh_segmentation(const char* _folder)
@@ -470,5 +474,16 @@ void apply_mesh_segmentation(const char* _folder)
       make_segmented_mesh(itr->path(), *machine);
   }
 }
+
+void refine_mesh_segmentation(const char* _machine_folder, 
+  const char* _traing_folder)
+{
+  if (!fs::exists(fs::path(_machine_folder).root_directory()))
+    return;
+  auto machine = ML::IMachine<double>::make();
+  machine->load(_machine_folder);
+  train_on_folder(machine.get(), _traing_folder);
+}
+
 
 } // namespace MeshSegmentation

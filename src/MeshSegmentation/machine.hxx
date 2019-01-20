@@ -22,7 +22,7 @@ namespace ML
 template <typename RealT>
 struct IMachine
 {
-  static std::shared_ptr<IMachine<RealT>> make();
+  static std::unique_ptr<IMachine<RealT>> make();
   virtual tensorflow::Input make_input(int _rows) = 0;
   virtual tensorflow::Input make_output(int _rows) = 0;
   virtual tensorflow::Input add_weight(int _m, int _n,

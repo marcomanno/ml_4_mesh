@@ -104,12 +104,10 @@ private:
 
 };
 
-template <typename RealT> std::shared_ptr<IMachine<RealT>>
+template <typename RealT> std::unique_ptr<IMachine<RealT>>
 IMachine<RealT>::make()
 {
-  IMachine<RealT>* m = new Machine<RealT>;
-  std::shared_ptr<IMachine<RealT>> x(m);
-  return x;
+  return std::make_unique<Machine<RealT>>();
 }
 
 template struct IMachine<double>;
