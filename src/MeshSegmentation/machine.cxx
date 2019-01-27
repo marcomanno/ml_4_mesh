@@ -43,7 +43,8 @@ struct Machine : public IMachine<RealT>
     const RealT& _grad_coeff = 1.e-5, const RealT& _reg_coeff = 0) override;
   void train(
     const std::vector<RealT>& _in, const std::vector<RealT>& _out,
-    int _iterations = 10000) override;
+    const int _iterations = 10000,
+    const double _learning_rate = 0.001) override;
 
   void predictN(const std::vector<RealT>& _in, std::vector<RealT> &_out) override
   {
@@ -74,7 +75,7 @@ private:
   std::vector<WeigthInfo> weights_info_;
 
   tensorflow::Output loss_, real_loss_;
-  std::vector<tensorflow::Output> apply_grad_;
+  std::vector<tensorflow::Output> grad_outputs_;
   std::unique_ptr<tensorflow::Output> out_layer_;
 
   // Op, A, X, B
@@ -149,8 +150,9 @@ Machine<RealT>::add_weight(int _m, int _n, const RealT& _init_val, const RealT& 
   tensorflow::Tensor int_tensor(TfType, tensorflow::TensorShape{ _m, _n });
   {
     std::vector<RealT> init_values(_m * _n);
+    const int PERIOD = 3;
     for (int i = 0; i < init_values.size(); ++i)
-      init_values[i] = static_cast<double>((i * 1000) % 31) / 31 * _init_val;
+      init_values[i] = (static_cast<double>(((i + 2) * 1000) % PERIOD) / PERIOD) * _init_val;
     std::copy(init_values.begin(), init_values.end(), int_tensor.flat<RealT>().data());
   }
   auto assign = tensorflow::ops::Assign(scope_, w, int_tensor);
@@ -178,11 +180,6 @@ Machine<RealT>::set_target(tensorflow::Output& _layer,
     const RealT& _grad_coeff, const RealT& _reg_coeff)
 {
   // regularization
-  tensorflow::OutputList l2_losses;
-  for (auto& w : weights_)
-    l2_losses.push_back(tensorflow::ops::L2Loss(scope_, w));
-  auto regularization = tensorflow::ops::AddN(scope_, l2_losses);
-
 #if 0
   real_loss_ = tensorflow::ops::ReduceMean(scope_,
     tensorflow::ops::Square(scope_,
@@ -199,6 +196,11 @@ Machine<RealT>::set_target(tensorflow::Output& _layer,
 #if 1
   loss_ = real_loss_;
 #else
+  tensorflow::OutputList l2_losses;
+  for (auto& w : weights_)
+    l2_losses.push_back(tensorflow::ops::L2Loss(scope_, w));
+  auto regularization = tensorflow::ops::AddN(scope_, l2_losses);
+
   tensorflow::ops::Cast reg_coeff = tensorflow::ops::Cast(scope_, _reg_coeff, TfType);
   loss_ = tensorflow::ops::Add(
     scope_,
@@ -207,36 +209,7 @@ Machine<RealT>::set_target(tensorflow::Output& _layer,
 #endif
 
   // add the gradients operations to the graph
-  std::vector<tensorflow::Output> grad_outputs;
-  tensorflow::AddSymbolicGradients(scope_, { loss_ }, weights_, &grad_outputs);
-  for (int i = 0; i < weights_.size(); ++i)
-  {
-#if 1
-    apply_grad_.push_back(tensorflow::ops::ApplyAdam(
-      scope_, weights_[i],
-      add_var(weights_info_[i].size_, 0.),
-      add_var(weights_info_[i].size_, 0.),
-      tensorflow::Input::Initializer(static_cast<RealT>(0.)),
-      tensorflow::Input::Initializer(static_cast<RealT>(0.)),
-      tensorflow::Input::Initializer(static_cast<RealT>(2.e-4)), // learning rate
-      tensorflow::Input::Initializer(static_cast<RealT>(0.9)),   // beta1
-      tensorflow::Input::Initializer(static_cast<RealT>(0.99)),  // beta2
-      tensorflow::Input::Initializer(static_cast<RealT>(0.00001)),  // eps
-      { grad_outputs[i] }));
-    if (!scope_.ok())
-    {
-      std::cout << scope_.status().ToString();
-      abort();
-    }
-
-#else
-    auto coeff = tensorflow::Input::Initializer(
-      weights_info_[i].grad_coeff_ == 0 ? _grad_coeff : weights_info_[i].grad_coeff_);
-    auto grad_coeff = tensorflow::ops::Cast(scope_, coeff, TfType);
-    apply_grad_.push_back(tensorflow::ops::ApplyGradientDescent(
-      scope_, weights_[i], grad_coeff, { grad_outputs[i] }));
-#endif
-  }
+  tensorflow::AddSymbolicGradients(scope_, { loss_ }, weights_, &grad_outputs_);
   out_layer_.reset(new tensorflow::Output(_layer));
   return loss_;
 }
@@ -244,8 +217,31 @@ Machine<RealT>::set_target(tensorflow::Output& _layer,
 template <class RealT> void 
 Machine<RealT>::train(
   const std::vector<RealT>& _in, const std::vector<RealT>& _out,
-  int _iterations)
+  const int _iterations,
+  const double _learning_rate)
 {
+  std::vector<tensorflow::Output> apply_grad;
+  for (int i = 0; i < weights_.size(); ++i)
+  {
+    apply_grad.push_back(tensorflow::ops::ApplyAdam(
+      scope_, weights_[i],
+      add_var(weights_info_[i].size_, 0.),
+      add_var(weights_info_[i].size_, 0.),
+      tensorflow::Input::Initializer(static_cast<RealT>(0.)),
+      tensorflow::Input::Initializer(static_cast<RealT>(0.)),
+      tensorflow::Input::Initializer(static_cast<RealT>(_learning_rate)), // learning rate
+      tensorflow::Input::Initializer(static_cast<RealT>(0.9)),   // beta1
+      tensorflow::Input::Initializer(static_cast<RealT>(0.99)),  // beta2
+      tensorflow::Input::Initializer(static_cast<RealT>(0.00000001)),  // eps
+      { grad_outputs_[i] }));
+    if (!scope_.ok())
+    {
+      std::cout << scope_.status().ToString();
+      abort();
+    }
+  }
+
+
   auto in_rows = x_size();
   tensorflow::Tensor x_data(
     TfType,
@@ -264,10 +260,13 @@ Machine<RealT>::train(
     if (i % 100 == 0)
     {
       TF_CHECK_OK(client_session_.Run({ { x_, x_data }, { *y_, y_data } }, { loss_ }, &outputs));
-      std::cout << "Loss after " << i << " steps " << outputs[0].scalar<RealT>() << std::endl;
+      RealT curr_loss = outputs[0].scalar<RealT>()(0);
+      std::cout << "Loss after " << i << " steps " << curr_loss << std::endl;
+      if (curr_loss < 0.5)
+        break;
     }
     // nullptr because the output from the run is useless
-    TF_CHECK_OK(client_session_.Run({ { x_, x_data }, { *y_, y_data } }, apply_grad_, nullptr));
+    TF_CHECK_OK(client_session_.Run({ { x_, x_data }, { *y_, y_data } }, apply_grad, nullptr));
   }
   TF_CHECK_OK(client_session_.Run({ { x_, x_data }, { *y_, y_data } }, { loss_ }, &outputs));
   std::cout << "Final loss " << outputs[0].scalar<RealT>() << std::endl;

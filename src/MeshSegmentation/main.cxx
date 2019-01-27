@@ -73,32 +73,6 @@ void load_data(std::vector<typeT> & _xx, std::vector<typeT>& _yy)
 
 #include "machine.hxx"
 
-void compute()
-{
-  using RealType = float;
-  auto machine = ML::IMachine<RealType>::make();
-  auto x = machine->make_input(3);
-  auto y = machine->make_output(1);
-  auto w0 = machine->add_weight(3, 3);
-  auto b0 = machine->add_weight(1, 3);
-  auto w1 = machine->add_weight(3, 2);
-  auto b1 = machine->add_weight(1, 2);
-  auto w2 = machine->add_weight(2, 1);
-  auto b2 = machine->add_weight(1, 1);
-  auto layer0 = machine->add_layer(x, w0, b0);
-  auto layer1 = machine->add_layer(tensorflow::Input(layer0), w1, b1);
-  auto layer2 = machine->add_layer(tensorflow::Input(layer1), w2, b2);
-  machine->set_target(layer2);
-
-  std::vector<RealType> xx, yy;
-  load_data(xx, yy);
-  machine->train(xx, yy);
-  std::vector<RealType> x1 = {1.25, -1, 7}, y1;
-  machine->predictN(x1, y1);
-
-  std::cout << x1[0] << " " << x1[1] << " " << x1[2] << " ---> " << y1[0];
-}
-
 int main(int _argc, char* _argv[])
 {
   if (_argc == 1)
@@ -106,7 +80,7 @@ int main(int _argc, char* _argv[])
   else if (_argc == 2)
     MeshSegmentation::apply_mesh_segmentation(INDIR"/mesh_segmentation2");
   else if (_argc == 3)
-    MeshSegmentation::refine_mesh_segmentation(INDIR"/machines/0002/data", INDIR"/mesh_segmentation");
+    MeshSegmentation::refine_mesh_segmentation(INDIR"/machines/0010/data", INDIR"/mesh_segmentation");
 #if 0
   compute();
   //tensorflow::port::InitMain(nullptr, 0, nullptr);

@@ -20,6 +20,7 @@ namespace fs = std::filesystem;
 
 namespace
 {
+static const size_t COURSE_NUMBER = 6;
 static const size_t INPUT_SIZE = 762;
 //static const size_t INPUT_SIZE = 378;
 //static const size_t INPUT_SIZE = 186;
@@ -205,6 +206,7 @@ struct MachineData
     _tr_dat.in_.insert(_tr_dat.in_.end(), input_var_.begin(), input_var_.end());
     _tr_dat.out_.push_back(_is_on_boundary ? 1. : 0.);
   }
+  
   bool predict(ML::IMachine<double>& _machine)
   {
     std::vector<double> res;
@@ -374,7 +376,7 @@ void make_segmented_mesh(
 }
 
 void train_mesh_segmentation_on_folder(
-  const fs::path& _folder, TrainData& _tr_dat)
+  const fs::path& _folder, TrainData& _tr_dat, int course)
 {
   if (!fs::exists(_folder))
     return;
@@ -382,9 +384,14 @@ void train_mesh_segmentation_on_folder(
   for (fs::directory_iterator itr(_folder); itr != end_itr; ++itr)
   {
     if (fs::is_directory(itr->status()))
-      train_mesh_segmentation_on_folder(itr->path(), _tr_dat);
+      train_mesh_segmentation_on_folder(itr->path(), _tr_dat, course);
     else if (itr->path().extension() == ".obj")
-      process(itr->path(), _tr_dat);
+    {
+      auto prefix = itr->path().filename().string().substr(0, 3);
+      int n = std::stoi(prefix);
+      if (n <= course)
+        process(itr->path(), _tr_dat);
+    }
   }
 }
 
@@ -398,16 +405,20 @@ static std::string data_file()
   return OUTDIR"/data";
 }
 
-static void train_on_folder(ML::IMachine<double>* _machine, const char* _folder)
+static void train_on_folder(ML::IMachine<double>* _machine, const char* _folder, 
+  int course, double _learning_rate)
 {
+  std::cout << "Stage " << course << std::endl;
   TrainData tr_dat;
-  train_mesh_segmentation_on_folder(fs::path(_folder), tr_dat);
+  train_mesh_segmentation_on_folder(fs::path(_folder), tr_dat, course);
+#if 0
   for (int i = 0; i < tr_dat.out_.size(); ++i)
   {
     if ((tr_dat.out_[i] > 0) ^ (fabs(tr_dat.in_[INPUT_SIZE * i]) > 0.1))
       std::cout << "Error " << tr_dat.out_[i] << " " << tr_dat.in_[INPUT_SIZE * i] << std::endl;
   }
-  _machine->train(tr_dat.in_, tr_dat.out_, 200000);
+#endif
+  _machine->train(tr_dat.in_, tr_dat.out_, 10000, _learning_rate);
   auto flnm = data_file();
   tr_dat.out_.resize(tr_dat.in_.size() / INPUT_SIZE);
   auto expecetd_result = tr_dat.out_;
@@ -428,9 +439,9 @@ void train_mesh_segmentation(const char* _folder)
   auto y = machine->make_output(1);
 
   const int INTERM_STEP1 = 5;
-
-  double grad_coeff[3] = {1e-5, 1e-5, 1e-5};
-  double int_coeff[3] = {0, 0.2, 0.2};
+    
+  double grad_coeff[3] = {1e-6, 1e-6, 1e-5};
+  double int_coeff[3] = {0.0, 0.5, 1};
   auto w0 = machine->add_weight(INPUT_SIZE, INTERM_STEP1, int_coeff[0], grad_coeff[0]);
   auto b0 = machine->add_weight(1, INTERM_STEP1, int_coeff[0], grad_coeff[0]);
   auto layer0 = machine->add_layer(x, w0, b0);
@@ -454,7 +465,13 @@ void train_mesh_segmentation(const char* _folder)
     }
   }
 
-  train_on_folder(machine.get(), _folder);
+  train_on_folder(machine.get(), _folder, 0, 1.e-4);
+  train_on_folder(machine.get(), _folder, 1, 5.e-4);
+  train_on_folder(machine.get(), _folder, 2, 5.e-4);
+  train_on_folder(machine.get(), _folder, 3, 5.e-4);
+  train_on_folder(machine.get(), _folder, 4, 5.e-4);
+  train_on_folder(machine.get(), _folder, 5, 5.e-5);
+  train_on_folder(machine.get(), _folder, 6, 5.e-5);
 }
 
 void apply_mesh_segmentation(const char* _folder)
@@ -482,7 +499,7 @@ void refine_mesh_segmentation(const char* _machine_folder,
     return;
   auto machine = ML::IMachine<double>::make();
   machine->load(_machine_folder);
-  train_on_folder(machine.get(), _traing_folder);
+  train_on_folder(machine.get(), _traing_folder, 3, 1.e-5);
 }
 
 

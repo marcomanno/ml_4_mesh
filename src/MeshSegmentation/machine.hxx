@@ -35,7 +35,8 @@ struct IMachine
     const RealT& _grad_coeff = 1.e-5, const RealT& _reg_coeff = 0) = 0;
   virtual void train(const std::vector<RealT>& _in,
                      const std::vector<RealT>& _out,
-                     int _iterations = 10000) = 0;
+                     const int _iterations = 10000,
+                     const double _learning_rate = 0.001) = 0;
   virtual void predict1(const std::vector<RealT>& _in, std::vector<RealT> &_out) = 0;
   virtual void predictN(const std::vector<RealT>& _in, std::vector<RealT> &_out) = 0;
   virtual void save(const char* _flnm) = 0;
