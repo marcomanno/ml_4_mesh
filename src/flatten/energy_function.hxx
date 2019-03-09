@@ -25,7 +25,7 @@ struct EnergyFunction : LM::IMultiFunction
 
 
   void init(const Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE>& _bf, 
-    const MapVertPos& _mvp);
+    const MapVertPos& _mvp, double _a0);
   MKL_INT compute_unkown_nmbr(bool _apply_constraints);
   bool evaluate(const LM::ColumnVector& _x, LM::ColumnVector& _f) const override;
   bool jacobian(const LM::ColumnVector& _x, LM::Matrix& _fj) const override;

@@ -4,6 +4,7 @@ project(${project_name})
 include_directories (
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/..
+  $ENV{MKL_ROOT_DIR}/mkl/include
   ${CMAKE_SOURCE_DIR}/tensorflow/include
 )
 

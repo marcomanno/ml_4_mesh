@@ -1,12 +1,18 @@
+//#pragma optimize("", off)
 #include "flatten.hxx"
 #include "optimal_rotation.hxx"
 
 #include "energy_function.hxx"
 #include "Topology/iterator.hh"
 
+
 #include <Eigen/PardisoSupport>
+//#include <Eigen/SparseQR>
+
 
 #include <Import/save_obj.hh>
+
+#include <fstream>
 
 namespace MeshOp {
 
@@ -90,7 +96,7 @@ ComputeData::ComputeData(const Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE
     return pt;
   };
   area0_ = area(bf_, vertex_point);
-  ef_.init(bf_, _mvp);
+  ef_.init(bf_, _mvp, area0_ / _bf.size());
 }
 
 void ComputeData::set_vertex_position(
@@ -174,9 +180,55 @@ void ComputeData::compute(bool _conformal, bool _apply_constraints)
 
   auto b = B * fixed;
   {
-    Eigen::LeastSquaresConjugateGradient<LM::Matrix> lsolver;
+    std::ofstream pipo("piripippo.txt");
+#define CH 0
+#if CH == 0
+    Eigen::SparseQR<LM::Matrix, Eigen::COLAMDOrdering<__int64>> lsolver;
     lsolver.compute(A);
     X_ = lsolver.solve(b);
+#elif CH == 1
+    LM::Matrix AA = A.transpose() * A;
+    Eigen::Matrix<double,-1,1,0,-1,1> B = A.transpose() * b;
+    for (auto i = AA.rows(); i-- > 0;)
+    {
+      auto n = AA.row(i).norm();
+      AA.row(i) /= n;
+      B.row(i) /= n;
+    }
+    auto keep_fun = [](int, int, double v) { return abs(v) > 1e-15; };
+    AA.prune(keep_fun);
+    Eigen::SparseLU<LM::Matrix> lsolver;
+    lsolver.compute(AA);
+    pipo << AA << std::endl;
+    pipo << "determinant" << lsolver.determinant();
+    X_ = lsolver.solve(B);
+
+#elif CH == 2
+    LM::Matrix AA = A.transpose() * A;
+    Eigen::Matrix<double,-1,1,0,-1,1>  B = A.transpose() * b;
+    for (auto i = AA.rows(); i-- > 0;)
+    {
+      auto n = AA.row(i).norm();
+      AA.row(i) /= n;
+      B(i) /= n;
+    }
+    auto keep_fun = [](int, int, double v) { return abs(v) > 1e-15; };
+    AA.prune(keep_fun);
+    pipo << AA << std::endl;
+    pipo << "determinant";
+    Eigen::PardisoLU<LM::Matrix> lsolver;
+    lsolver.compute(AA);
+    X_ = lsolver.solve(B);
+#elif CH == 3
+    Eigen::SuperLU<LM::Matrix> lsolver;
+    lsolver.compute(A.transpose() * A);
+    X_ = lsolver.solve(A.transpose() * b);
+#else
+    Eigen::LeastSquaresConjugateGradient<LM::Matrix> lsolver;
+    lsolver.compute(A);
+    lsolver.setMaxIterations(10000);
+    X_ = lsolver.solve(b);
+#endif
   }
   X_.conservativeResize(M.cols());
   X_.bottomRows(fixed_var) = -fixed;

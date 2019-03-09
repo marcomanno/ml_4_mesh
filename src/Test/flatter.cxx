@@ -288,3 +288,23 @@ TEST_CASE("my_flat_15_constr", "[FlatteningFinal]")
   };
   flatten_complete("aaaa05.obj", false, a_constr_function);
 }
+
+TEST_CASE("my_flat_16", "[FlatteningFinal]")
+{
+  flatten_complete("aaaa06.obj", false);
+}
+
+TEST_CASE("my_flat_16_conf", "[FlatteningFinal]")
+{
+  flatten_complete("aaaa06.obj", true);
+}
+
+TEST_CASE("my_flat_17", "[FlatteningFinal]")
+{
+  flatten_complete("aaaa07.obj", false);
+}
+
+TEST_CASE("my_flat_17_conf", "[FlatteningFinal]")
+{
+  flatten_complete("aaaa07.obj", true);
+}

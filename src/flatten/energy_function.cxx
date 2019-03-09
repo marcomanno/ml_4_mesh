@@ -1,3 +1,4 @@
+#pragma optimize ("", off)
 #include "energy_function.hxx"
 
 namespace MeshOp {
@@ -13,7 +14,7 @@ static auto move_to_local_coord(const Geo::VectorD3 _tri[3], Geo::VectorD2 _loc_
   _loc_tri[1][0] = v_02 * v_01 / _loc_tri[0][0];
   auto area_time_2 = Geo::length(v_02 % v_01);
   _loc_tri[1][1] = area_time_2 / _loc_tri[0][0];
-  return area_time_2;
+  return area_time_2 / 2;
 }
 
 } // namespace
@@ -38,7 +39,7 @@ void EnergyFunction::DataOfFace::fill_matrix(
 
 void EnergyFunction::init(
   const Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE>& _bf,
-  const MapVertPos& _mvp)
+  const MapVertPos& _mvp, double _a0)
 {
   tri_nmbr_ = _bf.size();
   n_ = 0;
@@ -70,18 +71,47 @@ void EnergyFunction::init(
           --fixed_nmbr_;
       }
     }
-    fd.compute_coeff(sqrt(move_to_local_coord(pts, fd.loc_tri_) * 0.5));
+    fd.compute_coeff(sqrt(move_to_local_coord(pts, fd.loc_tri_) / _a0));
   }
   fixed_nmbr_ = -fixed_nmbr_ - 1;
   const auto vert_nmbr = n_ + fixed_nmbr_;
-  for (auto& vind : vrt_inds_)
-    if (vind.second < 0)
-      vind.second += vert_nmbr;
+  std::map<MKL_INT, MKL_INT> remaps;
+  if (_mvp.empty())
+  {
+    auto reorder = 1;
+    for (auto&[v, ind] : vrt_inds_)
+    {
+      Topo::Iterator<Topo::Type::VERTEX, Topo::Type::FACE> vf(v);
+      Topo::Iterator<Topo::Type::VERTEX, Topo::Type::EDGE> ve(v);
+      if (vf.size() == ve.size() || remaps.find(ind) != remaps.end())
+        continue;
+      remaps[ind] = vert_nmbr - reorder;
+      remaps[vert_nmbr - reorder] = ind;
+      if (reorder++ == 2)
+        break;
+    }
+  }
+
+  auto fix_id = [&remaps, vert_nmbr](MKL_INT& _ind, double _coeff)
+  {
+    if (_ind < 0)
+      _ind += _coeff * vert_nmbr;
+    else
+    {
+      auto it = remaps.find(_ind / _coeff);
+      if (it != remaps.end())
+        _ind = _coeff * it->second;
+    }
+  };
+
+  for (auto&[v, ind] : vrt_inds_)
+    fix_id(ind, 1);
 
   for (auto& fdit : data_of_faces_)
-    for (auto& id : fdit.idx_)
-      if (id < 0) 
-        id += 2 * vert_nmbr;
+  {
+    for (auto& ind : fdit.idx_)
+      fix_id(ind, 2);
+  }
 
   m2_ = 2 * tri_nmbr_;
   m3_ = 3 * tri_nmbr_;

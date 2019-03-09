@@ -40,8 +40,8 @@ add_definitions(-DOUTDIR="${CMAKE_SOURCE_DIR}/../out/TestData")
 add_definitions(-DINDIR="${CMAKE_SOURCE_DIR}/Test/Data")
 
 # TODO: Add tests and install targets if needed.
-add_custom_command(TARGET ${project_name}
-                   POST_BUILD
-                   COMMAND ${CMAKE_COMMAND} -E copy_if_different 
-                           ${MKL_BIN}/libiomp5md.dll  ${CMAKE_CURRENT_BINARY_DIR}/libiomp5md.dll
-                   VERBATIM)
+#add_custom_command(TARGET ${project_name}
+#                   POST_BUILD
+#                   COMMAND ${CMAKE_COMMAND} -E copy_if_different 
+#                           ${MKL_BIN}/libiomp5md.dll  ${CMAKE_CURRENT_BINARY_DIR}/libiomp5md.dll
+#                   VERBATIM)
