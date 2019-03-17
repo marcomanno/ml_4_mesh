@@ -35,8 +35,7 @@ set (MKL_BIN $ENV{MKL_ROOT_DIR}/redist/intel64/compiler)
 
 set (MKL_LIBS "${MKL_LIB_DIR}/mkl_intel_ilp64.lib"
               "${MKL_LIB_DIR}/mkl_sequential.lib"
-              "${MKL_LIB_DIR}/mkl_core.lib"
-              "${MKL_LIB_DIR2}/libiomp5md.lib")
+              "${MKL_LIB_DIR}/mkl_core.lib")
 
 # Include sub-projects.
 #add_subdirectory(tensorflow)

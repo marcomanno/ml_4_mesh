@@ -1,4 +1,5 @@
 //#pragma optimize("", off)
+#if 0
 #include "catch.hpp"
 
 #include <unsupported/Eigen/LevenbergMarquardt>
@@ -404,3 +405,5 @@ TEST_CASE("flat_03", "[Flattening]")
   flatten_lscm(body);
   IO::save_obj("C:/Users/USER/source/repos/ml_4_mesh/src/Test/Data/bbb3.obj", body);
 }
+
+#endif

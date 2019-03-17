@@ -1,4 +1,4 @@
-//#pragma optimize("", off)
+#pragma optimize("", off)
 #include "flatten.hxx"
 #include "optimal_rotation.hxx"
 
@@ -181,7 +181,7 @@ void ComputeData::compute(bool _conformal, bool _apply_constraints)
   auto b = B * fixed;
   {
     std::ofstream pipo("piripippo.txt");
-#define CH 0
+#define CH 1
 #if CH == 0
     Eigen::SparseQR<LM::Matrix, Eigen::COLAMDOrdering<__int64>> lsolver;
     lsolver.compute(A);
@@ -195,11 +195,11 @@ void ComputeData::compute(bool _conformal, bool _apply_constraints)
       AA.row(i) /= n;
       B.row(i) /= n;
     }
-    auto keep_fun = [](int, int, double v) { return abs(v) > 1e-15; };
-    AA.prune(keep_fun);
+    //auto keep_fun = [](int, int, double v) { return abs(v) > 1e-15; };
+    //AA.prune(keep_fun);
     Eigen::SparseLU<LM::Matrix> lsolver;
     lsolver.compute(AA);
-    pipo << AA << std::endl;
+    //pipo << AA << std::endl;
     pipo << "determinant" << lsolver.determinant();
     X_ = lsolver.solve(B);
 

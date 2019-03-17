@@ -1,4 +1,4 @@
-#pragma optimize ("", off)
+//#pragma optimize ("", off)
 #include "energy_function.hxx"
 
 namespace MeshOp {
@@ -76,32 +76,67 @@ void EnergyFunction::init(
   fixed_nmbr_ = -fixed_nmbr_ - 1;
   const auto vert_nmbr = n_ + fixed_nmbr_;
   std::map<MKL_INT, MKL_INT> remaps;
-  if (_mvp.empty())
+  static bool sisi = false;
+  if (sisi && _mvp.empty())
   {
-    auto reorder = 1;
-    for (auto&[v, ind] : vrt_inds_)
+    auto find_reorder_map = [this, vert_nmbr, &remaps]()
     {
-      Topo::Iterator<Topo::Type::VERTEX, Topo::Type::FACE> vf(v);
-      Topo::Iterator<Topo::Type::VERTEX, Topo::Type::EDGE> ve(v);
-      if (vf.size() == ve.size() || remaps.find(ind) != remaps.end())
-        continue;
-      remaps[ind] = vert_nmbr - reorder;
-      remaps[vert_nmbr - reorder] = ind;
-      if (reorder++ == 2)
-        break;
-    }
+      auto reorder = 1;
+      double len_sq = 0;
+      Topo::Wrap<Topo::Type::EDGE> ed_max;
+      for (auto&[v, ind] : vrt_inds_)
+      {
+        Topo::Iterator<Topo::Type::VERTEX, Topo::Type::EDGE> ve(v);
+        for (auto e : ve)
+        {
+          Topo::Iterator<Topo::Type::EDGE, Topo::Type::FACE> ef(e);
+          if (ef.size() == 1)
+          {
+            Topo::Iterator<Topo::Type::EDGE, Topo::Type::VERTEX> ev(e);
+            Geo::Point pts[2];
+            int j = 0;
+            for (auto v : ev)
+            {
+              v->geom(pts[j++]);
+            }
+            auto len_sq_tmp = Geo::length_square(pts[0] - pts[1]);
+            if (len_sq_tmp > len_sq)
+            {
+              len_sq = len_sq_tmp;
+              ed_max = e;
+            }
+          }
+        }
+      }
+      Topo::Iterator<Topo::Type::EDGE, Topo::Type::VERTEX> ev(ed_max);
+      for (auto v : ev)
+      {
+        auto ind1 = vrt_inds_[v];
+        remaps[ind1] = vert_nmbr - reorder;
+        remaps[vert_nmbr - reorder] = ind1;
+        reorder++;
+      }
+    };
+    find_reorder_map();
   }
 
   auto fix_id = [&remaps, vert_nmbr](MKL_INT& _ind, double _coeff)
   {
     if (_ind < 0)
+    {
       _ind += _coeff * vert_nmbr;
+      return true;
+    }
     else
     {
       auto it = remaps.find(_ind / _coeff);
       if (it != remaps.end())
+      {
         _ind = _coeff * it->second;
+        return true;
+      }
     }
+    return false;
   };
 
   for (auto&[v, ind] : vrt_inds_)
@@ -109,8 +144,13 @@ void EnergyFunction::init(
 
   for (auto& fdit : data_of_faces_)
   {
+    int changes = 0;
     for (auto& ind : fdit.idx_)
-      fix_id(ind, 2);
+    {
+      changes += fix_id(ind, 2);
+    }
+    if (changes > 0)
+      std::cout << changes;
   }
 
   m2_ = 2 * tri_nmbr_;
@@ -128,7 +168,7 @@ MKL_INT EnergyFunction::compute_unkown_nmbr(bool _apply_constraints)
   else
   {
     n3_ = 2 * (n_ + fixed_nmbr_) - 3;
-    return 2 * (n_ + fixed_nmbr_) - 4;
+    return n3_ - 1;
   }
 }
 

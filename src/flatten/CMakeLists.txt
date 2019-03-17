@@ -6,6 +6,7 @@ include_directories (
   ${CMAKE_CURRENT_SOURCE_DIR}/..
   $ENV{MKL_ROOT_DIR}/mkl/include
   ${CMAKE_SOURCE_DIR}/tensorflow/include
+  ${CMAKE_SOURCE_DIR}/spectra
 )
 
 file(GLOB HXX_FILES ${CMAKE_CURRENT_SOURCE_DIR} "*.hxx")
