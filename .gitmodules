@@ -1,3 +1,6 @@
 [submodule "src/Catch2"]
 	path = src/Catch2
 	url = https://github.com/catchorg/Catch2
+[submodule "src/spectra"]
+	path = src/spectra
+	url = https://github.com/yixuan/spectra/
