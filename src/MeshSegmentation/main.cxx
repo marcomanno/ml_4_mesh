@@ -80,7 +80,7 @@ int main(int _argc, char* _argv[])
   else if (_argc == 2)
     MeshSegmentation::apply_mesh_segmentation(INDIR"/mesh_segmentation2");
   else if (_argc == 3)
-    MeshSegmentation::refine_mesh_segmentation(INDIR"/machines/0010/data", INDIR"/mesh_segmentation");
+    MeshSegmentation::refine_mesh_segmentation(INDIR"/machines/0012/data", INDIR"/mesh_segmentation");
 #if 0
   compute();
   //tensorflow::port::InitMain(nullptr, 0, nullptr);

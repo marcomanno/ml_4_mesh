@@ -25,6 +25,10 @@ void EnergyFunction::DataOfFace::compute_coeff(double _area_sqrt)
   c0_ = _area_sqrt / loc_tri_[0][0]; // 1 / x_1
   c1_ = _area_sqrt / loc_tri_[1][1]; // 1 / y_2
   c2_ = _area_sqrt * loc_tri_[1][0] / (loc_tri_[0][0] * loc_tri_[1][1]); // x_2 / (x_1 * y_2)
+
+  w_[0] = (loc_tri_[1] - loc_tri_[0]) / _area_sqrt;
+  w_[1] =  -loc_tri_[1] / _area_sqrt;
+  w_[2] = loc_tri_[0] / _area_sqrt;
 }
 
 void EnergyFunction::DataOfFace::fill_matrix(
@@ -36,6 +40,12 @@ void EnergyFunction::DataOfFace::fill_matrix(
                 0,      -c0_,    0,  c0_,   0,   0,
                 0, c2_ - c1_,    0, -c2_,   0, c1_;
   }
+
+const std::array<Geo::VectorD2, 3>& 
+EnergyFunction::DataOfFace::get_lscm_coeff() const
+{
+  return w_;
+}
 
 void EnergyFunction::init(
   const Topo::Iterator<Topo::Type::BODY, Topo::Type::FACE>& _bf,
@@ -76,13 +86,13 @@ void EnergyFunction::init(
   fixed_nmbr_ = -fixed_nmbr_ - 1;
   const auto vert_nmbr = n_ + fixed_nmbr_;
   std::map<MKL_INT, MKL_INT> remaps;
-  static bool sisi = false;
+  static bool sisi = true;
   if (sisi && _mvp.empty())
   {
     auto find_reorder_map = [this, vert_nmbr, &remaps]()
     {
       auto reorder = 1;
-      double len_sq = 0;
+      double len_sq = 0; // std::numeric_limits<double>::max();
       Topo::Wrap<Topo::Type::EDGE> ed_max;
       for (auto&[v, ind] : vrt_inds_)
       {
@@ -104,10 +114,12 @@ void EnergyFunction::init(
             {
               len_sq = len_sq_tmp;
               ed_max = e;
+              goto here;
             }
           }
         }
       }
+      here:
       Topo::Iterator<Topo::Type::EDGE, Topo::Type::VERTEX> ev(ed_max);
       for (auto v : ev)
       {
@@ -200,9 +212,21 @@ void EnergyFunction::jacobian_conformal(LM::Matrix& _fj) const
   Eigen::Matrix<double, 4, 6> da_uv;
   for (auto& fd : data_of_faces_)
   {
-    // 3 equations per face.
+    // 2 equations per face.
     MKL_INT i_eq = i_eq_loop;
     i_eq_loop += 2;
+#if 0
+    const auto& w = fd.get_lscm_coeff();
+    for (size_t j = 0; j < 3; ++j)
+    {
+      auto idx_base = fd.idx_[j];
+      triplets.emplace_back(i_eq, idx_base, w[j][0]);
+      triplets.emplace_back(i_eq, idx_base + 1, -w[j][1]);
+      triplets.emplace_back(i_eq + 1, idx_base, w[j][1]);
+      triplets.emplace_back(i_eq + 1, idx_base + 1, w[j][0]);
+    }
+
+#else
     fd.fill_matrix(da_uv);
     Eigen::Matrix<double, 2, 6> df_uv = dfa * da_uv;
     for (MKL_INT i = 0; i < 2; ++i)
@@ -219,6 +243,7 @@ void EnergyFunction::jacobian_conformal(LM::Matrix& _fj) const
         }
       }
     }
+#endif
   }
   _fj.setFromTriplets(triplets.begin(), triplets.end());
 }
@@ -247,9 +272,9 @@ int EnergyFunction::compute(const Eigen::VectorXd& _x,
     auto det = a * d - b * c;
     if (_fvec != nullptr)
     {
-      (*_fvec)(i_eq) = fd.area_sqrt_ * (a - d);
-      (*_fvec)(i_eq + 1) = fd.area_sqrt_ * (b + c);
-      (*_fvec)(i_eq + 2) = fd.area_sqrt_ * (std::log(det));
+      (*_fvec)(i_eq) = fd.area_sqrt() * (a - d);
+      (*_fvec)(i_eq + 1) = fd.area_sqrt() * (b + c);
+      (*_fvec)(i_eq + 2) = fd.area_sqrt() * (std::log(det));
     }
     if (_fjac == nullptr)
       continue;

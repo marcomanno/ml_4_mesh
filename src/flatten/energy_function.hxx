@@ -15,12 +15,17 @@ struct EnergyFunction : LM::IMultiFunction
 {
   struct DataOfFace
   {
-    Geo::VectorD2 loc_tri_[2];
-    MKL_INT idx_[3];
-    double area_sqrt_;
-    double c0_, c1_, c2_;
     void compute_coeff(double _area_sqrt);
     void fill_matrix(Eigen::Matrix<double, 4, 6>& _da_uv) const;
+    const std::array<Geo::VectorD2, 3>& get_lscm_coeff() const;
+    double area_sqrt() const { return area_sqrt_; }
+
+    Geo::VectorD2 loc_tri_[2];
+    MKL_INT idx_[3];
+  private:
+    double area_sqrt_;
+    double c0_, c1_, c2_;
+    std::array<Geo::VectorD2, 3> w_;
   };
 
 

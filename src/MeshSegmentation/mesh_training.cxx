@@ -441,7 +441,7 @@ void train_mesh_segmentation(const char* _folder)
   const int INTERM_STEP1 = 5;
     
   double grad_coeff[3] = {1e-6, 1e-6, 1e-5};
-  double int_coeff[3] = {0.0, 0.5, 1};
+  double int_coeff[3] = {0.25, 0.5, 1};
   auto w0 = machine->add_weight(INPUT_SIZE, INTERM_STEP1, int_coeff[0], grad_coeff[0]);
   auto b0 = machine->add_weight(1, INTERM_STEP1, int_coeff[0], grad_coeff[0]);
   auto layer0 = machine->add_layer(x, w0, b0);
@@ -450,7 +450,7 @@ void train_mesh_segmentation(const char* _folder)
     machine->set_target(layer0, 1.e-6, 1e-10);
   else
   {
-    const int INTERM_STEP2 = 3;
+    const int INTERM_STEP2 = 8;
     auto w1 = machine->add_weight(INTERM_STEP1, INTERM_STEP2, int_coeff[1], grad_coeff[1]);
     auto b1 = machine->add_weight(1, INTERM_STEP2, int_coeff[1], grad_coeff[1]);
     auto layer1 = machine->add_layer(tensorflow::Input(layer0), w1, b1);
@@ -465,13 +465,13 @@ void train_mesh_segmentation(const char* _folder)
     }
   }
 
-  train_on_folder(machine.get(), _folder, 0, 1.e-4);
-  train_on_folder(machine.get(), _folder, 1, 5.e-4);
-  train_on_folder(machine.get(), _folder, 2, 5.e-4);
-  train_on_folder(machine.get(), _folder, 3, 5.e-4);
-  train_on_folder(machine.get(), _folder, 4, 5.e-4);
-  train_on_folder(machine.get(), _folder, 5, 5.e-5);
-  train_on_folder(machine.get(), _folder, 6, 5.e-5);
+  train_on_folder(machine.get(), _folder, 0, 1.e-3);
+  train_on_folder(machine.get(), _folder, 1, 1.e-3);
+  train_on_folder(machine.get(), _folder, 2, 1.e-3);
+  train_on_folder(machine.get(), _folder, 3, 1.e-3);
+  train_on_folder(machine.get(), _folder, 4, 1.e-3);
+  train_on_folder(machine.get(), _folder, 5, 1.e-3);
+  train_on_folder(machine.get(), _folder, 6, 1.e-3);
 }
 
 void apply_mesh_segmentation(const char* _folder)
@@ -499,7 +499,8 @@ void refine_mesh_segmentation(const char* _machine_folder,
     return;
   auto machine = ML::IMachine<double>::make();
   machine->load(_machine_folder);
-  train_on_folder(machine.get(), _traing_folder, 3, 1.e-5);
+  train_on_folder(machine.get(), _traing_folder, 4, 1.e-3);
+  train_on_folder(machine.get(), _traing_folder, 5, 1.e-3);
 }
 
 

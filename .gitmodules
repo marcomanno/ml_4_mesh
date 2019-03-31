@@ -4,3 +4,6 @@
 [submodule "src/spectra"]
 	path = src/spectra
 	url = https://github.com/yixuan/spectra/
+[submodule "src/eigen-git-mirror"]
+	path = src/eigen-git-mirror
+	url = https://github.com/eigenteam/eigen-git-mirror
