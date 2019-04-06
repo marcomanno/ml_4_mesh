@@ -1,4 +1,4 @@
-//#pragma optimize("", off)
+#pragma optimize("", off)
 #include "flatten.hxx"
 #include "optimal_rotation.hxx"
 
@@ -11,6 +11,12 @@
 #include <Spectra/SymEigsSolver.h>
 #include <Spectra/GenEigsSolver.h>
 #include <Spectra/MatOp/SparseGenMatProd.h>
+#include <Eigen/Core>
+#include <Eigen/SparseCore>
+#include <Eigen/Eigenvalues>
+#include <Spectra/SymGEigsSolver.h>
+#include <Spectra/MatOp/DenseSymMatProd.h>
+#include <Spectra/MatOp/SparseCholesky.h>
 
 #include <Import/save_obj.hh>
 
@@ -183,7 +189,7 @@ void ComputeData::compute(bool _conformal, bool _apply_constraints)
   auto b = B * fixed;
   {
     std::ofstream pipo("piripippo.txt");
-#define CH 5
+#define CH 4
 #if CH == 0
     Eigen::SparseQR<LM::Matrix, Eigen::COLAMDOrdering<__int64>> lsolver;
     lsolver.compute(A);
@@ -226,24 +232,31 @@ void ComputeData::compute(bool _conformal, bool _apply_constraints)
     lsolver.compute(A.transpose() * A);
     X_ = lsolver.solve(A.transpose() * b);
 #elif CH == 4
+    LM::Matrix area_matrix;
+    ef_.area_matrix(area_matrix);
     LM::Matrix AA = A.transpose() * A;
-    using SparseGen = Spectra::SparseGenMatProd<double, 0, MKL_INT>;
-    SparseGen op(AA);
-    Spectra::GenEigsSolver<double, Spectra::SMALLEST_REAL, SparseGen> eigs(&op, 1, 1000);
-    eigs.init();
-    int nconv = eigs.compute();
-    auto res = eigs.info();
+
+    using SpectraOp = Spectra::SparseSymMatProd<double, Eigen::Lower, 0, MKL_INT>;
+    using SpectraBOp = Spectra::SparseCholesky<double, Eigen::Lower, 0, MKL_INT>;
+    SpectraOp op(area_matrix);
+    SpectraBOp  Bop(AA);
+
+    // Construct generalized eigen solver object, requesting the largest three generalized eigenvalues
+    Spectra::SymGEigsSolver<double, Spectra::LARGEST_ALGE, SpectraOp, SpectraBOp, Spectra::GEIGS_CHOLESKY>
+        geigs(&op, &Bop, 1, 6);
+    // Initialize and compute
+    geigs.init();
+    int nconv = geigs.compute();
+    auto res = geigs.info();
     if (res != Spectra::SUCCESSFUL)
     {
       std::cout << res << " Computed:" << nconv << std::endl;
       throw "Error";
     }
-    Eigen::VectorXd evalues;
-    auto eig_val = eigs.eigenvalues();
-    std::cout << eig_val << std::endl;
-    auto vect = eigs.eigenvectors(3);
-    X_ = vect.col(1).real();
-    std::cout << X_ << std::endl;
+    auto eig_val = geigs.eigenvalues();
+    std::cout << std::endl << "eig_val:"<< std::endl << eig_val << std::endl;
+    X_ = geigs.eigenvectors();
+    //std::cout << X_ << std::endl;
 #else
     Eigen::LeastSquaresConjugateGradient<LM::Matrix> lsolver;
     lsolver.compute(A);
@@ -252,7 +265,7 @@ void ComputeData::compute(bool _conformal, bool _apply_constraints)
 #endif
   }
   X_.conservativeResize(M.cols());
-  X_.bottomRows(fixed_var) = -fixed;
+  //X_.bottomRows(fixed_var) = -fixed;
 
   auto& vrt_inds = ef_.veterx_map();
 

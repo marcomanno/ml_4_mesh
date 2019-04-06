@@ -1,4 +1,4 @@
-//#pragma optimize ("", off)
+#pragma optimize ("", off)
 #include "energy_function.hxx"
 
 namespace MeshOp {
@@ -180,7 +180,7 @@ MKL_INT EnergyFunction::compute_unkown_nmbr(bool _apply_constraints)
   else
   {
     n3_ = 2 * (n_ + fixed_nmbr_) - 3;
-    return n3_ - 1;
+    return n3_;
   }
 }
 
@@ -246,6 +246,34 @@ void EnergyFunction::jacobian_conformal(LM::Matrix& _fj) const
 #endif
   }
   _fj.setFromTriplets(triplets.begin(), triplets.end());
+}
+
+// Return the matrix that can be used to compute the area by multiplying
+// x' * _area_matrix * x
+void EnergyFunction::area_matrix(LM::Matrix& _area_matrix)
+{
+  MKL_INT n_var = n2_ - 3;
+  _area_matrix.resize(n_var, n_var);
+  std::vector<Eigen::Triplet<double>> triplets;
+  for (auto& fd : data_of_faces_)
+  {
+    auto get_idx = [&fd](int _i) { return static_cast<int>(fd.idx_[_i]); };
+    for (int i = 0, prev = 2, next = 1; i < 3; next = prev, prev = i++)
+    {
+      int ii[][2] = {{ get_idx(i), get_idx(next) + 1 }, { get_idx(i), get_idx(prev) + 1 }};
+      for (int j : {0, 1})
+      {
+        auto insert = [n_var, &triplets](int _a, int _b)
+        {
+          if (_a < n_var && _b < n_var)
+            triplets.emplace_back(_a, _b, 0.5);
+        };
+        insert(ii[0][j], ii[0][1-j]);
+        insert(ii[1][j], ii[1][1-1]);
+      }
+    }
+  }
+  _area_matrix.setFromTriplets(triplets.begin(), triplets.end());
 }
 
 int EnergyFunction::compute(const Eigen::VectorXd& _x,

@@ -35,6 +35,7 @@ struct EnergyFunction : LM::IMultiFunction
   bool evaluate(const LM::ColumnVector& _x, LM::ColumnVector& _f) const override;
   bool jacobian(const LM::ColumnVector& _x, LM::Matrix& _fj) const override;
   void jacobian_conformal(LM::Matrix& _fj) const;
+  void area_matrix(LM::Matrix& _area_m);
 
   MKL_INT rows() const override;
   MKL_INT cols() const override;
