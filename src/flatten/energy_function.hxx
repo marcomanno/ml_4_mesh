@@ -50,6 +50,7 @@ protected:
   MKL_INT fixed_nmbr_;
   MKL_INT m2_, m3_;
   MKL_INT n2_, n3_;
+  MKL_INT fixed_zero_ = 0;
   VertexIndMpap vrt_inds_;
 
   int compute(const LM::ColumnVector& _x,

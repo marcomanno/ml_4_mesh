@@ -179,6 +179,7 @@ MKL_INT EnergyFunction::compute_unkown_nmbr(bool _apply_constraints)
   }
   else
   {
+    fixed_zero_ = 3;
     n3_ = 2 * (n_ + fixed_nmbr_) - 3;
     return n3_;
   }
@@ -252,26 +253,27 @@ void EnergyFunction::jacobian_conformal(LM::Matrix& _fj) const
 // x' * _area_matrix * x
 void EnergyFunction::area_matrix(LM::Matrix& _area_matrix)
 {
-  MKL_INT n_var = n2_ - 3;
+  MKL_INT n_var = n2_ - fixed_zero_;
   _area_matrix.resize(n_var, n_var);
   std::vector<Eigen::Triplet<double>> triplets;
   for (auto& fd : data_of_faces_)
   {
-    auto get_idx = [&fd](int _i) { return static_cast<int>(fd.idx_[_i]); };
-    for (int i = 0, prev = 2, next = 1; i < 3; next = prev, prev = i++)
+    // Area of a face = 
+    // u0 * v1 + u1 * v2 + u2 * v0 - u0 * v2 - u1 * v0 - u2 * v1
+    auto insert = [n_var, &triplets, &fd](int _a, int _b, double _v)
     {
-      int ii[][2] = {{ get_idx(i), get_idx(next) + 1 }, { get_idx(i), get_idx(prev) + 1 }};
-      for (int j : {0, 1})
-      {
-        auto insert = [n_var, &triplets](int _a, int _b)
-        {
-          if (_a < n_var && _b < n_var)
-            triplets.emplace_back(_a, _b, 0.5);
-        };
-        insert(ii[0][j], ii[0][1-j]);
-        insert(ii[1][j], ii[1][1-1]);
-      }
-    }
+      auto get_idx = [&fd](int _i) { return static_cast<int>(fd.idx_[_i]); };
+      auto i = get_idx(_a);
+      auto j = get_idx(_b) + 1;
+      if (i < n_var && j < n_var)
+        triplets.emplace_back(i, j, _v);
+    };
+    insert(0, 1, 1.);
+    insert(1, 2, 1.);
+    insert(2, 0, 1.);
+    insert(0, 2, -1.);
+    insert(1, 0, -1.);
+    insert(2, 1, -1.);
   }
   _area_matrix.setFromTriplets(triplets.begin(), triplets.end());
 }

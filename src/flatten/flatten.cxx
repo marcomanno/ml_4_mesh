@@ -1,4 +1,4 @@
-#pragma optimize("", off)
+//#pragma optimize("", off)
 #include "flatten.hxx"
 #include "optimal_rotation.hxx"
 
@@ -172,7 +172,6 @@ void ComputeData::compute(bool _conformal, bool _apply_constraints)
   MKL_INT unkn_nmbr = ef_.compute_unkown_nmbr(_apply_constraints);
   LM::Matrix M;
   ef_.jacobian_conformal(M);
-
   MKL_INT fixed_var = M.cols() - unkn_nmbr;
   auto split_idx = unkn_nmbr;
   auto A = M.block(0, 0, M.rows(), split_idx);
@@ -180,10 +179,10 @@ void ComputeData::compute(bool _conformal, bool _apply_constraints)
   Eigen::VectorXd fixed(fixed_var);
   if (_apply_constraints)
     fixed = X_.bottomRows(fixed_var);
-  else
+  else if (fixed_var > 0)
   {
     fixed.setZero();
-    fixed[0] = -100;
+    //fixed[0] = -100;
   }
 
   auto b = B * fixed;
@@ -236,6 +235,23 @@ void ComputeData::compute(bool _conformal, bool _apply_constraints)
     ef_.area_matrix(area_matrix);
     LM::Matrix AA = A.transpose() * A;
 
+    //Eigen::SparseLU<LM::Matrix> lsolver;
+    Eigen::SimplicialLDLT<LM::Matrix> lsolver;
+    lsolver.compute(AA);
+    LM::Matrix AAinvAreaM = lsolver.solve(area_matrix);
+    using SpectraOp = Spectra::SparseGenMatProd<double, 0, MKL_INT>;
+    SpectraOp op(AAinvAreaM);
+    Spectra::GenEigsSolver<double, Spectra::LARGEST_MAGN, SpectraOp> eigs(&op, 3, 6);
+    eigs.init();
+    int nconv = eigs.compute();
+    if (eigs.info() != Spectra::SUCCESSFUL)
+    {
+      std::cout << eigs.info() << " Computed:" << nconv << std::endl;
+      throw "Error";
+    }
+    X_ = eigs.eigenvectors().col(0).real();
+#if 0
+
     using SpectraOp = Spectra::SparseSymMatProd<double, Eigen::Lower, 0, MKL_INT>;
     using SpectraBOp = Spectra::SparseCholesky<double, Eigen::Lower, 0, MKL_INT>;
     SpectraOp op(area_matrix);
@@ -243,7 +259,7 @@ void ComputeData::compute(bool _conformal, bool _apply_constraints)
 
     // Construct generalized eigen solver object, requesting the largest three generalized eigenvalues
     Spectra::SymGEigsSolver<double, Spectra::LARGEST_ALGE, SpectraOp, SpectraBOp, Spectra::GEIGS_CHOLESKY>
-        geigs(&op, &Bop, 1, 6);
+        geigs(&op, &Bop, 3, 6);
     // Initialize and compute
     geigs.init();
     int nconv = geigs.compute();
@@ -255,8 +271,10 @@ void ComputeData::compute(bool _conformal, bool _apply_constraints)
     }
     auto eig_val = geigs.eigenvalues();
     std::cout << std::endl << "eig_val:"<< std::endl << eig_val << std::endl;
-    X_ = geigs.eigenvectors();
+    static int col_sel = 0;
+    X_ = geigs.eigenvectors().col(col_sel);
     //std::cout << X_ << std::endl;
+#endif
 #else
     Eigen::LeastSquaresConjugateGradient<LM::Matrix> lsolver;
     lsolver.compute(A);
@@ -265,7 +283,7 @@ void ComputeData::compute(bool _conformal, bool _apply_constraints)
 #endif
   }
   X_.conservativeResize(M.cols());
-  //X_.bottomRows(fixed_var) = -fixed;
+  X_.bottomRows(fixed_var) = -fixed;
 
   auto& vrt_inds = ef_.veterx_map();
 
