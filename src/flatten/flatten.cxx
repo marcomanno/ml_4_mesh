@@ -188,7 +188,7 @@ void ComputeData::compute(bool _conformal, bool _apply_constraints)
   auto b = B * fixed;
   {
     std::ofstream pipo("piripippo.txt");
-#define CH 4
+#define CH 5
 #if CH == 0
     Eigen::SparseQR<LM::Matrix, Eigen::COLAMDOrdering<__int64>> lsolver;
     lsolver.compute(A);
@@ -238,6 +238,8 @@ void ComputeData::compute(bool _conformal, bool _apply_constraints)
     //Eigen::SparseLU<LM::Matrix> lsolver;
     Eigen::SimplicialLDLT<LM::Matrix> lsolver;
     lsolver.compute(AA);
+	//lsolver.matrixL();
+	//lsolver.matrixU();
     LM::Matrix AAinvAreaM = lsolver.solve(area_matrix);
     using SpectraOp = Spectra::SparseGenMatProd<double, 0, MKL_INT>;
     SpectraOp op(AAinvAreaM);
@@ -250,9 +252,12 @@ void ComputeData::compute(bool _conformal, bool _apply_constraints)
       throw "Error";
     }
     X_ = eigs.eigenvectors().col(0).real();
-#if 0
+#elif CH == 5
+	LM::Matrix area_matrix;
+	ef_.area_matrix(area_matrix);
+	LM::Matrix AA = A.transpose() * A;
 
-    using SpectraOp = Spectra::SparseSymMatProd<double, Eigen::Lower, 0, MKL_INT>;
+    using SpectraOp = Spectra::SparseGenMatProd<double, 0, MKL_INT>;
     using SpectraBOp = Spectra::SparseCholesky<double, Eigen::Lower, 0, MKL_INT>;
     SpectraOp op(area_matrix);
     SpectraBOp  Bop(AA);
@@ -274,7 +279,6 @@ void ComputeData::compute(bool _conformal, bool _apply_constraints)
     static int col_sel = 0;
     X_ = geigs.eigenvectors().col(col_sel);
     //std::cout << X_ << std::endl;
-#endif
 #else
     Eigen::LeastSquaresConjugateGradient<LM::Matrix> lsolver;
     lsolver.compute(A);
